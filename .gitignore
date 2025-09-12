@@ -1,0 +1,15 @@
+# Ignorar o ambiente virtual
+.venv/
+venv/
+
+# Arquivos Python comuns que não devem ir pro repo
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Editor / IDE (opcional)
+.vscode/
+.idea/
+
+# Arquivos de ambiente
+.env
