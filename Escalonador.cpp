@@ -1,121 +1,192 @@
 #include "Escalonador.hpp"
 #include "TCB.hpp"
+#include <climits> 
 
-    Escalonador::Escalonador(int q,int m, int al):
-    time(-1),quantum(q),mode(m),algo(al),list(),taskAtual()
+Escalonador::Escalonador(int q,int m, int al):
+time(-1),quantum(q),mode(m),algo(al),list(),taskAtual()
+{
+    listaProntas = new DataStructures::Lista<TCB*>();
+}
+Escalonador::Escalonador(int q,int m,int al,DataStructures::Lista<TCB*> *novaLista):
+time(-1),quantum(q),mode(m),algo(al),list(novaLista),taskAtual(nullptr)
+{
+    
+    DataStructures::Lista<TCB*>::Iterator it;
+    for(it = list->begin();it != list->end();++it)
     {
-        listaProntas = new DataStructures::Lista<TCB*>();
+        inicioDasTask.push_back((*it)->inicio);
     }
-    Escalonador::Escalonador(int q,int m,int al,DataStructures::Lista<TCB*> *novaLista):
-    time(-1),quantum(q),mode(m),algo(al),list(novaLista),taskAtual(nullptr)
-    {
-       
-        DataStructures::Lista<TCB*>::Iterator it;
-        for(it = list->begin();it != list->end();++it)
-        {
-            inicioDasTask.push_back((*it)->inicio);
-        }
-        listaProntas = new DataStructures::Lista<TCB*>();
+    listaProntas = new DataStructures::Lista<TCB*>();
 
+}
+Escalonador::~Escalonador()
+{
+    if(listaProntas) {
+    delete listaProntas;
+    listaProntas = nullptr;
     }
-    Escalonador::~Escalonador()
+    //não deletamos list pois pode ser fornecida externamente 
+
+}
+void Escalonador::InserirLista(DataStructures::Lista<TCB*> novaLista)
+{
+
+}
+
+void Escalonador::preemptar()
+{
+    if(algo == 0)
     {
-        if(listaProntas) {
-        delete listaProntas;
-        listaProntas = nullptr;
-        }
-        //não deletamos list pois pode ser fornecida externamente 
-
-    }
-    void Escalonador::InserirLista(DataStructures::Lista<TCB*> novaLista)
-    {
-
-    }
-
-    void Escalonador::preemptar()
-    {
-        if(algo == 0)
-        {
-            FIFO();
-        }
-
-        /*
-        if(algo == 1)
-        {
-
-        }
-
-        if(algo == 2)
-        {
-
-        }
-        */
+        FIFO();
     }
 
-    void Escalonador::verificarProntas()
+    
+    if(algo == 1)
     {
-        DataStructures::Lista<TCB*>::Iterator it;
-        for(it = list->begin();it!= list->end();++it)
+        SRTF();
+    }
+    /*
+    if(algo == 2)
+    {
+
+    }
+    */
+}
+
+void Escalonador::verificarProntas()
+{
+    DataStructures::Lista<TCB*>::Iterator it;
+    for(it = list->begin();it!= list->end();++it)
+    {
+        if((*it)->inicio == time)
         {
-            if((*it)->inicio == time)
-            {
-                listaProntas->insert_back(*it);
-                //2 = pronta
-                (*it)->state = 2;
-            }
+            listaProntas->insert_back(*it);
+            //2 = pronta
+            (*it)->state = 2;
+        }
+    }
+}
+
+void Escalonador::limparListaProntas()
+{
+    if (!listaProntas) return;
+
+    DataStructures::Lista<TCB*>::Iterator it = listaProntas->begin();
+    // percorre avançando o iterador ANTES de possivelmente remover o elemento atual
+    while (it != listaProntas->end())
+    {
+        TCB* t = *it;
+        ++it; // avança primeiro (evita invalidar o iterador que estamos usando)
+        if (t && t->duracao <= 0)
+        {
+            // removeK vai apagar o nodo (Elemento) que contém o ponteiro t
+            t->state = 5; //5 = finalizada
+            listaProntas->removeK(t);
+        }
+    }
+}
+
+//Talvez seja válido criar uma fila so para o Fifo inves de alterar direto na lista de prontas
+void Escalonador::FIFO()
+{
+    // se existe uma task em execução, coloca ela ao final das prontas
+    if(taskAtual)
+    {
+        listaProntas->insert_back(taskAtual);
+    }
+
+    // seleciona a próxima (assumimos que getHead() retorna nullptr se vazio)
+    if(listaProntas->getHead() != nullptr)
+    {
+        taskAtual = listaProntas->getHead()->getInfo();
+        //3 = executando
+        taskAtual->state = 3;
+        listaProntas->remove_front();
+    } 
+    else 
+    {
+        taskAtual = nullptr;
+    }
+}
+
+void Escalonador::SRTF()
+{
+    if (!listaProntas) return;            // proteção
+    limparListaProntas();                 // remove prontas com duração <= 0
+
+    // proteção: lista pode ter ficado vazia depois da limpeza
+    if (listaProntas->getHead() == nullptr) return;
+
+    DataStructures::Lista<TCB*>::Iterator it;
+    int menorDur = INT_MAX;
+    int menorId  = INT_MAX;
+    TCB* escolhido = nullptr;
+
+    // procura menor (duracao, id)
+    for (it = listaProntas->begin(); it != listaProntas->end(); ++it)
+    {
+        TCB* t = *it;
+        if (!t) continue;
+        if (t->duracao <= 0) continue;   // ignora já terminadas
+        if (t->state == 5) continue;     // ignora por estado (se estiver usando)
+
+        if (t->duracao < menorDur || (t->duracao == menorDur && t->id < menorId))
+        {
+            menorDur = t->duracao;
+            menorId  = t->id;
+            escolhido = t;
         }
     }
 
-    void Escalonador::FIFO()
-    {
-        // se existe uma task em execução, coloca ela ao final das prontas
-        if(taskAtual)
-        {
-            listaProntas->insert_back(taskAtual);
-        }
+    if (!escolhido) return; // nada válido para escolher
 
-        // seleciona a próxima (assumimos que getHead() retorna nullptr se vazio)
-        if(listaProntas->getHead() != nullptr)
-        {
-            taskAtual = listaProntas->getHead()->getInfo();
-            //3 = executando
-            taskAtual->state = 3;
-            listaProntas->remove_front();
-        } 
-        else 
-        {
-            taskAtual = nullptr;
-        }
+    // se já é a task atual, apenas garante estado
+    if (taskAtual == escolhido)
+    {
+        taskAtual->state = 3;
+        return;
     }
 
-    void Escalonador::statusAtual()
+    // se existia uma task atual diferente, marca-a como pronta (sem reinserir)
+    if (taskAtual)
     {
-        cout<<"Time atual: "<<time<<" mode atual "<<mode<< " Algoritmo atual "<<algo<<endl;
+        taskAtual->state = 2; // pronta (não vamos inserir na lista de prontas aqui)
     }
 
-    void Escalonador::tick()
+    // escolhe a nova taskAtual (sem removê-la da lista de prontas)
+    taskAtual = escolhido;
+    taskAtual->state = 3; // executando
+    
+}
+
+void Escalonador::statusAtual()
+{
+    cout<<"Time atual: "<<time<<" mode atual "<<mode<< " Algoritmo atual "<<algo<<endl;
+}
+
+void Escalonador::tick()
+{
+    time+=1;
+    cout<<"Time antes "<<time-1<<" Time atual "<<time<<endl;
+
+    if(taskAtual)
     {
-        time+=1;
-        cout<<"Time antes "<<time-1<<" Time atual "<<time<<endl;
-
-        if(taskAtual)
+        taskAtual->duracao--;
+        cout<<"Task atual: "<<taskAtual->id<<" duracção restante "<<taskAtual->duracao<<endl;
+        if(taskAtual->duracao <= 0)
         {
-            taskAtual->duracao--;
-            cout<<"Task atual: "<<taskAtual->id<<" duracção restante "<<taskAtual->duracao<<endl;
-            if(taskAtual->duracao <= 0)
-            {
-                //5 = terminada
-                taskAtual->state = 5;
-            }
+            //5 = terminada
+            taskAtual->state = 5;
         }
-        else
-        {
-            cout<<"CPU ociosa nesse tick"<<endl;
-        }
-            
     }
+    else
+    {
+        cout<<"CPU ociosa nesse tick"<<endl;
+    }
+        
+}
 
- void Escalonador::executar()
+void Escalonador::executar()
 {
     if (quantum <= 0) {
         cout << "Erro, quantum 0" << endl;

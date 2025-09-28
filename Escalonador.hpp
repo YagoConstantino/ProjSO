@@ -28,7 +28,9 @@ public:
     void InserirLista(DataStructures::Lista<TCB*> novaLista);
     void preemptar();
     void verificarProntas();
+    void limparListaProntas();
     void FIFO();
+    void SRTF();
     void statusAtual();
     void tick();
     void executar();
