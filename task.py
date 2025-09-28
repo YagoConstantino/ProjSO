@@ -1,5 +1,5 @@
-from dataclasses import dataclass,field
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import List, Optional, ClassVar
 
 """// Estrutura que define um Task Control Block (TCB)
 typedef struct task_t
@@ -31,16 +31,16 @@ typedef struct task_t
 """
 @dataclass
 class TCB:
-    #Classe para a task do escalonador
-    id:int
-    #variáveis para a cor da task
-    R:int
-    G:int
-    B:int
-    
-    #indica o estado de uma tarefa (ver defines no final do arquivo ppos.h):
-    #n - nova, r - pronta, x - executando, s - suspensa, e - terminada
-    state: str
+    """
+    Conversão do TCB C++ para Python.
+    - state mantido como int (1=nova,2=pronta,3=executando,4=suspensa,5=terminada)
+    - RGB como lista de 3 ints
+    """
+    id: int
+    RGB: List[int]
+
+    # estado: usar inteiros como no C++
+    state: int = 1
 
     # códigos / timers / prioridades / estatísticas
     exitCode: int = 0
@@ -49,22 +49,106 @@ class TCB:
     # campos adicionais
     prio_s: int = 0     # prioridade estática
     prio_d: int = 0     # prioridade dinâmica
-    quantum: int = 20   # quantum padrão = 20
+    # quantum comentado no C++ original — não incluído por padrão
 
     inicio: int = 0
     fim: int = 0
-    inicioexec: int = 0
-    fimexec: int = 0
-    somaexec: int = 0
+    inicioExec: int = 0
+    fimExec: int = 0
+    somaExec: int = 0
     ativacoes: int = 0
     duracao: int = 0
 
-    # campos para lista duplamente encadeada
+    # ponteiros para listas (manter para compatibilidade conceitual)
     prev: Optional["TCB"] = field(default=None, repr=False)
     next: Optional["TCB"] = field(default=None, repr=False)
 
+    # ---------- construtores alternativos (espelham os overloads do C++) ----------
+    @classmethod
+    def from_id_state_rgb(cls, ID: int, sta: int, rgb: List[int]) -> "TCB":
+        """Equivalente: TCB(int ID,int sta,const array<int,3> v)"""
+        if len(rgb) != 3:
+            raise ValueError("RGB deve ter exatamente 3 inteiros")
+        return cls(id=ID, RGB=list(rgb), state=sta)
 
+    @classmethod
+    def from_params(cls, ID: int, rgb: List[int], pris: int, ini: int, dura: int) -> "TCB":
+        """
+        Equivalente:
+        TCB(int ID,const array<int,3> v,int pris,int ini,int dura)
+        Define prio_d = prio_s e state = 1 (nova).
+        """
+        if len(rgb) != 3:
+            raise ValueError("RGB deve ter exatamente 3 inteiros")
+        obj = cls(id=ID, RGB=list(rgb))
+        obj.prio_s = pris
+        obj.prio_d = pris
+        obj.inicio = ini
+        obj.duracao = dura
+        obj.exitCode = 0
+        obj.awakeTime = 0
+        obj.state = 1
+        return obj
 
+    # -------------------- GETTERS --------------------
+    def getState(self) -> int:
+        return self.state
+
+    def getExitCode(self) -> int:
+        return self.exitCode
+
+    def getAwakeTime(self) -> int:
+        return self.awakeTime
+
+    def getPrioD(self) -> int:
+        return self.prio_d
+
+    def getFim(self) -> int:
+        return self.fim
+
+    def getInicioExec(self) -> int:
+        return self.inicioExec
+
+    def getFimExec(self) -> int:
+        return self.fimExec
+
+    def getSomaExec(self) -> int:
+        return self.somaExec
+
+    def getAtivacoes(self) -> int:
+        return self.ativacoes
+
+    # -------------------- SETTERS --------------------
+    def setState(self, s: int) -> None:
+        self.state = int(s)
+
+    def setExitCode(self, code: int) -> None:
+        self.exitCode = int(code)
+
+    def setAwakeTime(self, t: int) -> None:
+        self.awakeTime = int(t)
+
+    def setPrioD(self, p: int) -> None:
+        self.prio_d = int(p)
+
+    def setFim(self, f: int) -> None:
+        self.fim = int(f)
+
+    def setInicioExec(self, v: int) -> None:
+        self.inicioExec = int(v)
+
+    def setFimExec(self, v: int) -> None:
+        self.fimExec = int(v)
+
+    def setSomaExec(self, s: int) -> None:
+        self.somaExec = int(s)
+
+    def setAtivacoes(self, a: int) -> None:
+        self.ativacoes = int(a)
+
+    def __repr__(self) -> str:
+        return (f"TCB(id={self.id}, state={self.state}, RGB={self.RGB}, "
+                f"prio_s={self.prio_s}, prio_d={self.prio_d}, inicio={self.inicio}, duracao={self.duracao})")
 
 
 
