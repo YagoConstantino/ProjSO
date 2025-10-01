@@ -2,6 +2,11 @@
 #include "Lista/Lista.hpp"
 #include <array>
 using namespace std;
+
+/*
+Disclaimer
+parte da estrutura desse TCB foi inspirado no modelo de task do projeto PPOS do professor Mazieiro da UFPR
+*/
 class TCB
 {
     //Variáveis

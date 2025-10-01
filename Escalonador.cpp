@@ -41,16 +41,20 @@ void Escalonador::preemptar()
     }
 
     
-    if(algo == 1)
+    else if(algo == 1)
     {
         SRTF();
     }
-    /*
-    if(algo == 2)
+    
+    else if(algo == 2)
     {
-
+        PRIOp();
     }
-    */
+    
+    else if(algo == 3)
+    {
+        RoundRobin();
+    }
 }
 
 void Escalonador::verificarProntas()
@@ -79,33 +83,34 @@ void Escalonador::limparListaProntas()
         ++it; // avança primeiro (evita invalidar o iterador que estamos usando)
         if (t && t->duracao <= 0)
         {
-            // removeK vai apagar o nodo (Elemento) que contém o ponteiro t
+            // removeK vai apagar o nó que contém o ponteiro t
             t->state = 5; //5 = finalizada
             listaProntas->removeK(t);
         }
     }
 }
 
-//Talvez seja válido criar uma fila so para o Fifo inves de alterar direto na lista de prontas
+//(Talvez seja válido criar uma fila so para o Fifo inves de alterar direto na lista de prontas)
 void Escalonador::FIFO()
 {
-    // se existe uma task em execução, coloca ela ao final das prontas
-    if(taskAtual)
+   // Se existe uma task em execução e ela ainda tem duração, NÃO trocamos (FIFO é não-preemptivo).
+    if (taskAtual && taskAtual->duracao > 0)
     {
-        listaProntas->insert_back(taskAtual);
+        // garante estado correto
+        taskAtual->state = 3; // executando
+        return;
     }
 
-    // seleciona a próxima (assumimos que getHead() retorna nullptr se vazio)
-    if(listaProntas->getHead() != nullptr)
+    // Caso contrário — CPU livre — pega a próxima da fila de prontas (se houver)
+    if (listaProntas && listaProntas->getHead() != nullptr)
     {
         taskAtual = listaProntas->getHead()->getInfo();
-        //3 = executando
-        taskAtual->state = 3;
+        taskAtual->state = 3; // executando
         listaProntas->remove_front();
-    } 
-    else 
+    }
+    else
     {
-        taskAtual = nullptr;
+        taskAtual = nullptr; // sem tarefa para executar
     }
 }
 
@@ -128,7 +133,7 @@ void Escalonador::SRTF()
         TCB* t = *it;
         if (!t) continue;
         if (t->duracao <= 0) continue;   // ignora já terminadas
-        if (t->state == 5) continue;     // ignora por estado (se estiver usando)
+        if (t->state == 5) continue;     // ignora por estado (se estiver terminada)
 
         if (t->duracao < menorDur || (t->duracao == menorDur && t->id < menorId))
         {
@@ -147,10 +152,10 @@ void Escalonador::SRTF()
         return;
     }
 
-    // se existia uma task atual diferente, marca-a como pronta (sem reinserir)
+    // se existia uma task atual diferente, marca-a como pronta 
     if (taskAtual)
     {
-        taskAtual->state = 2; // pronta (não vamos inserir na lista de prontas aqui)
+        taskAtual->state = 2; // pronta 
     }
 
     // escolhe a nova taskAtual (sem removê-la da lista de prontas)
@@ -159,20 +164,84 @@ void Escalonador::SRTF()
     
 }
 
+void Escalonador::RoundRobin()
+{
+     // se existe uma task em execução, coloca ela ao final das prontas
+    if(taskAtual)
+    {
+        listaProntas->insert_back(taskAtual);
+    }
+
+    // seleciona a próxima (assumimos que getHead() retorna nullptr se vazio)
+    if(listaProntas->getHead() != nullptr)
+    {
+        taskAtual = listaProntas->getHead()->getInfo();
+        //3 = executando
+        taskAtual->state = 3;
+        listaProntas->remove_front();
+    } 
+    else 
+    {
+        taskAtual = nullptr;
+    }
+}
+
+void Escalonador::PRIOp()
+{
+    if(!listaProntas) return; //proteção caso nao tenha alocado a lista
+    limparListaProntas();
+
+    //lista pode ter ficado vazia depois da limpeza
+    if(listaProntas->getHead()==nullptr) return;
+
+    DataStructures::Lista<TCB*>::Iterator it;
+    int maiorPrioridade = 0;
+    int menorID = INT_MAX;
+    TCB* escolhido = nullptr;
+
+    //procura a maior (prioridade), em caso de empate o menor id
+
+    for(it = listaProntas->begin();it!= listaProntas->end();++it)
+    {
+        TCB* t = *it;
+        if(!t) continue;
+        if(t->duracao <= 0) continue;
+        if(t->state == 5 || t->state == 3) continue; //ignora se já terminou ou se está executando agora
+
+        if(t->prio_s > maiorPrioridade || t->prio_s == maiorPrioridade && t->id < menorID)
+        {
+            maiorPrioridade = t->prio_s;
+            menorID = t->id;
+            escolhido = t;
+        }
+    }
+    //se existe uma task atual, marca ela como pronta
+    if(taskAtual)
+    {
+        taskAtual->state = 2;// 2 = pronta 
+    }
+
+    //escolhe a nova task atual e seta o state dela como executando
+    taskAtual = escolhido;
+    taskAtual->state = 3;
+
+}
+
 void Escalonador::statusAtual()
 {
     cout<<"Time atual: "<<time<<" mode atual "<<mode<< " Algoritmo atual "<<algo<<endl;
+    //cout<<"Task atual " << taskAtual->id<<" Time Atual "<<time<<endl;
 }
 
 void Escalonador::tick()
 {
     time+=1;
-    cout<<"Time antes "<<time-1<<" Time atual "<<time<<endl;
+    //cout<<"Time antes "<<time-1<<" Time atual "<<time<<endl;
 
     if(taskAtual)
     {
         taskAtual->duracao--;
-        cout<<"Task atual: "<<taskAtual->id<<" duracção restante "<<taskAtual->duracao<<endl;
+        cout<<"Task atual: "<<taskAtual->id<<" duração restante "<<taskAtual->duracao<<" Time atual "<<time<<endl;
         if(taskAtual->duracao <= 0)
         {
             //5 = terminada
@@ -221,7 +290,7 @@ void Escalonador::executar()
 
         // 2) inserir as tasks novas (se houver)
         if (tasksNovas > 0) {
-            if (mode == 1) cout << "Chegaram " << tasksNovas << " tasks no tempo " << time << endl;
+            if (mode == 1) //cout << "Chegaram " << tasksNovas << " tasks no tempo " << time << endl;
 
             // verifica e insere na fila de prontas; já marca estado em verificarProntas()
             verificarProntas();
@@ -272,10 +341,18 @@ void Escalonador::executar()
                 // diminui quantum restante
                 remQuantum--;
                 if (remQuantum <= 0) {
-                    if (mode == 1) cout << "Quantum zerado em time " << time << " -> preemptando\n";
-                    // só preempta se houver outra task pronta
+                    if (mode == 1) cout << "Quantum zerado em time " << time << " -> preemptando (se o algoritmo permitir)\n";
+                    // só preempta por quantum se o algoritmo suportar preempção por quantum (RoundRobin)
                     if (listaProntas && listaProntas->getHead() != nullptr) {
-                        preemptar(); // aqui pode usar FIFO() que vai mover taskAtual para o fim e pegar próxima
+                        if (algo >=2) { // 2 = PRIOp (preemptivo por quantum) e 3 = RoundRobin
+                            preemptar();
+                        } else {
+                            // algoritmo não preempta por quantum: não chamar preemptar()
+                            if (mode == 1) {
+                                if (algo == 1) cout << "SRTF configurado: não preempta por quantum, somente por chegada de novas tasks.\n";
+                                else if (algo == 0) cout << "FIFO configurado: não preempta por quantum.\n";
+                            }
+                        }
                     }
                     remQuantum = quantum;
                 }

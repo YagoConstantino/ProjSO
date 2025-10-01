@@ -32,7 +32,7 @@ int main()
     lista.insert_back(&d);
 
     // Cria o escalonador: quantum=2, mode=1 (debug), algo=0 (FIFO)
-    Escalonador esc(2, 1, 1, &lista);
+    Escalonador esc(2, 1, 2, &lista);
 
     // Mostra status inicial
     esc.statusAtual();

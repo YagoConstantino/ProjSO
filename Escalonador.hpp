@@ -31,6 +31,8 @@ public:
     void limparListaProntas();
     void FIFO();
     void SRTF();
+    void RoundRobin();
+    void PRIOp();
     void statusAtual();
     void tick();
     void executar();
