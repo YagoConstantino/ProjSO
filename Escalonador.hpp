@@ -1,10 +1,10 @@
 #pragma once
 #include <iostream>
-#include "Lista/Lista.hpp"
-#include <queue>
 #include <vector>
-using namespace std;
+#include <list>
+
 class TCB;
+
 class Escalonador
 {
 private:
@@ -15,17 +15,22 @@ private:
 
     TCB* taskAtual;
 
-    //algo = 0 FIFO, algo = 1 SRTF, algo = 2 PrioE;
+    // algo = 0 FIFO, algo = 1 SRTF, algo = 2 PRIOp;
     int algo;
     std::vector<int> inicioDasTask;
-    DataStructures::Lista<TCB*> *list;
-    DataStructures::Lista<TCB*> *listaProntas;
+
+    // listas usando STL por valor
+    std::list<TCB*> list;
+    std::list<TCB*> listaProntas;
     
 public:
-    Escalonador(int q,int m, int al);
-    Escalonador(int q,int m,int al,DataStructures::Lista<TCB*> *novaLista);
+    // construtores / destrutor
+    Escalonador(int q, int m, int al);
+    Escalonador(int q, int m, int al, const std::list<TCB*>& novaLista);
     ~Escalonador();
-    void InserirLista(DataStructures::Lista<TCB*> novaLista);
+
+    // métodos
+    void InserirLista(const std::list<TCB*>& novaLista);
     void preemptar();
     void verificarProntas();
     void limparListaProntas();
@@ -36,5 +41,4 @@ public:
     void statusAtual();
     void tick();
     void executar();
-
 };

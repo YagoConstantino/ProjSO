@@ -57,7 +57,7 @@ class TCB
     int getExitCode() const { return exitCode; }
     int getAwakeTime() const { return awakeTime; }
     int getPrioD() const { return prio_d; }
-    //int getQuantum() const { return quantum; }
+    int getQuantum() const { return quantum; }
     int getFim() const { return fim; }
     int getInicioExec() const { return inicioExec; }
     int getFimExec() const { return fimExec; }
@@ -69,7 +69,7 @@ class TCB
     void setExitCode(int code) { exitCode = code; }
     void setAwakeTime(int t) { awakeTime = t; }
     void setPrioD(int p) { prio_d = p; }
-    //void setQuantum(int q) { quantum = q; }
+    void setQuantum(int q) { quantum = q; }
     void setFim(int f) { fim = f; }
     void setInicioExec(int v) { inicioExec = v; }
     void setFimExec(int v) { fimExec = v; }
