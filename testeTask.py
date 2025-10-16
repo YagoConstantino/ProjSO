@@ -9,13 +9,11 @@ q.push_back(t1)
 q.push_back(t2)
 q.push_back(t3)
 
-print(len(q))  # 3
+print(len(q))
 
-# Iterar na fila
 for t in q:
     print(f"Tarefa {t.id} ({t.state})")
 
-# Remover do início
 removido = q.pop_front()
 print("Removido:", removido.id)
 
