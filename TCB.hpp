@@ -1,5 +1,4 @@
 #include <iostream>
-#include "Lista/Lista.hpp"
 #include <array>
 using namespace std;
 
