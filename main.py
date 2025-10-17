@@ -110,21 +110,70 @@ class App(tk.Tk):
         if not self.simulator or not self.simulator.all_tasks:
             return
 
-        task_ids = sorted([t.id for t in self.simulator.all_tasks])
+        task_ids = sorted([t.id for t in self.simulator.all_tasks],reverse= True)
         task_y_positions = {task_id: i * 40 + 20 for i, task_id in enumerate(task_ids)}
 
         # Desenha as linhas de base e os IDs das tarefas
         for task_id, y in task_y_positions.items():
             self.gantt_canvas.create_text(20, y, anchor=tk.W, text=f"T{task_id}")
         
-        # Desenha os blocos de execução
-        block_width = 20
-        for time, task_id, rgb_color in self.simulator.gantt_data:
+         # ----------------- parâmetros do Gantt -----------------
+        block_width = 20        # largura de cada unidade de tempo em pixels
+        left_margin = 50        # margem esquerda antes do primeiro bloco
+
+        # ----------------- desenha blocos de execução e encontra tempo máximo -----------------
+        max_time = -1
+        gantt_data = getattr(self.simulator, "gantt_data", []) or []
+
+        for time, task_id, rgb_color in gantt_data:
+            if time > max_time:
+                max_time = time
             if task_id != "IDLE":
+                # garante que a task existe no mapeamento (segurança)
+                if task_id not in task_y_positions:
+                    continue
                 y_pos = task_y_positions[task_id]
-                x_start = 50 + time * block_width
+                x_start = left_margin + time * block_width
                 color = f"#{rgb_color[0]:02x}{rgb_color[1]:02x}{rgb_color[2]:02x}"
-                self.gantt_canvas.create_rectangle(x_start, y_pos - 15, x_start + block_width, y_pos + 15, fill=color, outline="black")
+                self.gantt_canvas.create_rectangle(
+                    x_start, y_pos - 15, x_start + block_width, y_pos + 15,
+                    fill=color, outline="black"
+                )
+
+                # se não houver dados, usa tempo atual do simulador
+        if max_time < 0:
+            max_time = getattr(self.simulator, "time", 1)
+
+        total_time = max_time + 1   # número de unidades de tempo a desenhar
+        x_end = left_margin + total_time * block_width
+        max_y = max(task_y_positions.values()) if task_y_positions else 0
+
+        # ----------------- desenha a linha do tempo / contador embaixo -----------------
+        # eixo_y agora fica logo abaixo do último bloco
+        eixo_y = max_y + 40  
+
+        # linha principal do eixo X (fica no fim do gráfico)
+        # começa na margem esquerda e termina exatamente na borda direita (x_end)
+        self.gantt_canvas.create_line(left_margin, eixo_y, x_end, eixo_y, width=2)
+
+        # desenha ticks e rótulos 0..total_time (centralizados nos blocos)
+            # percorrer t = 1..total_time (cada t corresponde ao bloco t-1)
+        for t in range(1, total_time + 1):
+            x_block_start = left_margin + (t - 1) * block_width
+            x_block_end = x_block_start + block_width
+            x_center = x_block_start + block_width / 2
+
+            # linha no início e no fim do bloco
+            self.gantt_canvas.create_line(x_block_start, eixo_y - 6, x_block_start, eixo_y + 6)
+            self.gantt_canvas.create_line(x_block_end, eixo_y - 6, x_block_end, eixo_y + 6)
+
+            # texto do tempo (começando em 1), com tag única para cada label
+            tag = f"time_label_{t}"
+            self.gantt_canvas.create_text(x_center, eixo_y + 18, text=str(t), anchor=tk.N, font=("Arial", 9), tags=(tag,))
+
+        # ----------------- ajusta área de rolagem -----------------
+        # adiciona margem extra à direita para o último rótulo caber
+        self.gantt_canvas.config(scrollregion=(0, 0, x_end + 50, eixo_y + 40))
 
 if __name__ == "__main__":
     app = App()

@@ -7,6 +7,7 @@ class TCB:
     RGB: List[int]
     state: int = 1
     prio_s: int = 0
+    prio_d: int = 0
     inicio: int = 0
     duracao: int = 0
     

@@ -1,7 +1,8 @@
-FIFO;2
+PRIOp;2
 #id;cor_id;ingresso;duracao;prioridade;eventos...
-t01;0;5;2;5;IO:2-1
+t01;0;5;2;3;IO:2-1
 t02;1;4;3;4
-t03;2;3;5;3
-t04;3;5;6;2
+t03;2;3;5;2
+t04;3;5;6;7
 t05;4;7;4;1
+t06;5;0;7;1
