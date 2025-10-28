@@ -47,6 +47,10 @@ class App(tk.Tk):
         self.lbl_ready_queue = Label(status_frame, text="Fila de Prontos: []")
         self.lbl_ready_queue.pack(side=tk.LEFT, padx=10)
 
+        #Adicionando o label para o nome do algoritmo ---
+        self.lbl_algo_name = Label(status_frame, text="Algoritmo: N/A")
+        self.lbl_algo_name.pack(side=tk.LEFT, padx=10)
+
         # Canvas para o Gráfico de Gantt
         self.gantt_canvas = Canvas(self, bg="white", scrollregion=(0, 0, 2000, 400))
         self.gantt_canvas.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
@@ -71,13 +75,20 @@ class App(tk.Tk):
                 return
 
             self.simulator = Simulator(scheduler_class(), tasks)
+
+            # Atualiza o texto do label com o algo_name ---
+            self.lbl_algo_name.config(text=f"Algoritmo: {algo_name}")
+           
+
             self.btn_step.config(state=tk.NORMAL)
             self.btn_run.config(state=tk.NORMAL)
             self.update_ui()
             print(f"Arquivo '{filepath}' carregado. Algoritmo: {algo_name}, Tarefas: {len(tasks)}")
         except Exception as e:
             print(f"Erro ao carregar o arquivo: {e}")
-
+            #Reseta o label em caso de falha ---
+            self.lbl_algo_name.config(text="Algoritmo: N/A")
+            
     def do_step(self):
         if self.simulator:
             self.simulator.step()
