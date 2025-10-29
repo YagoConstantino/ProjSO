@@ -8,6 +8,7 @@ COLOR_MAP = {
     "3": [255, 255, 0],
     "4": [0, 255, 255],
     "5": [255, 0, 255],
+    "6": [125,22,123]
 }
 
 def load_simulation_config(filepath: str) -> Tuple[str, Optional[int], List[TCB]]:
