@@ -107,7 +107,7 @@ class PriorityScheduler(Scheduler):
         highest_prio_task = max(ready_queue, key=lambda task: task.prio_s)
         return highest_prio_task
 
-
+############NAO FUNCIONA
 class RoundRobinScheduler(Scheduler):
     """
     Escalonador Round-Robin.
@@ -119,13 +119,27 @@ class RoundRobinScheduler(Scheduler):
         Seleciona a próxima tarefa seguindo a política Round-Robin.
         Preempta quando o quantum se esgota.
         """
-        if ready_queue.is_empty():
-            return None
         
-        # Se há tarefa em execução e ainda tem quantum, continua
+        # Caso 1: Tarefa atual continua em execução
+        # Se ela existe E seu quantum ainda não acabou.
         if current_task and self.time_slice_remaining > 0:
             return current_task
+            
+        # Caso 2: Quantum acabou (ou não havia tarefa atual)
         
-        # Quantum esgotado ou sem tarefa atual: pega a próxima da fila
-        # Note: o simulador deve mover a tarefa atual para o fim da fila
-        return ready_queue.head
+        # Se a fila de prontos NÃO está vazia, há para quem trocar.
+        if not ready_queue.is_empty():
+            # Pega o próximo da fila.
+            # O simulador será responsável por mover a 'current_task' (se houver) 
+            # para o fim da fila.
+            return ready_queue.head
+        
+        # Se a fila de prontos ESTÁ vazia:
+        # Não há para quem trocar. A tarefa atual (se existir)
+        # deve continuar, mesmo que o quantum tenha estourado.
+        if current_task:
+            return current_task
+            
+        # Caso final: Fila de prontos vazia E sem tarefa atual.
+        # A CPU está ociosa.
+        return None

@@ -119,6 +119,8 @@ class Simulator:
         self._check_io_unblock()
         
         # 3. Seleciona a próxima tarefa a executar
+        # O simulador DEVE perguntar ao escalonador A CADA PASSO.
+        # O escalonador (ex: RoundRobin) decide se continua ou troca.
         next_task = self.scheduler.select_next_task(self.ready_queue, self.current_task, self.time)
         
         # 4. Gerencia troca de contexto
@@ -129,7 +131,7 @@ class Simulator:
                 self.current_task.fimExec = self.time
                 self.current_task.somaExec += (self.time - self.current_task.inicioExec)
                 
-                # Reseta quantum no escalonador
+                # Reseta quantum no escalonador (só RoundRobin vai usar isso)
                 if hasattr(self.scheduler, 'reset_quantum'):
                     self.scheduler.reset_quantum()
             
@@ -139,7 +141,7 @@ class Simulator:
                 self.current_task.state = 3  # Estado: Executando
                 self.current_task.inicioExec = self.time
                 self.current_task.ativacoes += 1
-        
+            
         # 5. Executa a tarefa atual
         if self.current_task:
             # Executa por 1 unidade de tempo
@@ -171,7 +173,16 @@ class Simulator:
         else:
             # CPU ociosa (IDLE)
             self.gantt_data.append((self.time, "IDLE", [200, 200, 200], "IDLE"))
+            
+    
+        # No final do passo, registre todas as tarefas que estão na fila de prontos
+        # como "READY" para este instante de tempo.
+        for task in self.ready_queue:
+            # Evita registrar a tarefa que acabou de ser selecionada como "pronta" no mesmo instante
+            if task != self.current_task: 
+                self.gantt_data.append((self.time, task.id, task.RGB, "READY"))
 
+        
         # 8. Incrementa o relógio
         self.time += 1
 

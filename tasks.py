@@ -37,7 +37,7 @@ class TCB:
     """
     id: int
     RGB: List[int]
-    state: int = 1
+    state: int = 1  #(1=Novo, 2=Pronto, 3=Executando, 4=Bloqueado, 5=Terminado)
     prio_s: int = 0
     prio_d: int = 0
     inicio: int = 0
@@ -74,6 +74,7 @@ class TCB:
             if tempo_inicio == self.tempo_exec_acumulado:
                 # Remove o evento para não disparar novamente
                 self.io_events.pop(i)
+                self.state = 2
                 return (tempo_inicio, duracao)
         return None
 

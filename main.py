@@ -228,36 +228,49 @@ class App(tk.Tk):
         max_time = -1
         gantt_data = getattr(self.simulator, "gantt_data", []) or []
         
-        # Rastreia quais tarefas já iniciaram
-        tasks_started = set()
-
-        # Desenha os blocos de execução
+        # --- ESTE É O ÚNICO LOOP DE DESENHO NECESSÁRIO ---
         for entry in gantt_data:
+            # Garante compatibilidade caso o 'state' não exista (embora devesse)
             if len(entry) == 4:
                 time, task_id, rgb_color, state = entry
             else:
-                # Compatibilidade com formato antigo
                 time, task_id, rgb_color = entry
-                state = "EXEC"
-            
+                state = "EXEC" # Assume EXEC se o estado faltar
+
             if time > max_time:
                 max_time = time
-                
-            if task_id != "IDLE":
-                tasks_started.add(task_id)
-                if task_id not in task_y_positions:
-                    continue
-                y_pos = task_y_positions[task_id]
-                x_start = left_margin + time * block_width
-                
-                # Define cor (sempre usa a cor da tarefa)
-                color = f"#{rgb_color[0]:02x}{rgb_color[1]:02x}{rgb_color[2]:02x}"
-                
-                # Desenha retângulo com borda preta padrão
+            
+            if task_id == "IDLE":
+                continue # Não desenha nada para IDLE
+            
+            if task_id not in task_y_positions:
+                continue
+            
+            y_pos = task_y_positions[task_id]
+            x_start = left_margin + time * block_width
+            color_hex = f"#{rgb_color[0]:02x}{rgb_color[1]:02x}{rgb_color[2]:02x}"
+
+            if state == "EXEC":
+                # Estado de Execução (Sólido)
                 self.gantt_canvas.create_rectangle(
                     x_start, y_pos - 15, x_start + block_width, y_pos + 15,
-                    fill=color, outline="black", width=1
+                    fill=color_hex, outline="black"
                 )
+            elif state == "IO":
+                # Estado de I/O (Pontilhado com cor)
+                self.gantt_canvas.create_rectangle(
+                    x_start, y_pos - 15, x_start + block_width, y_pos + 15,
+                    fill=color_hex, outline="gray", stipple="gray50"
+                )
+            elif state == "READY":
+                # Estado Pronto (Transparente / Apenas borda pontilhada)
+                self.gantt_canvas.create_rectangle(
+                    x_start, y_pos - 15, x_start + block_width, y_pos + 15,
+                    fill="",           # Sem preenchimento
+                    outline="gray",    # Cor da borda
+                    stipple="gray25"   # Padrão pontilhado para o "quadrado"
+                )
+        # --- FIM DO ÚNICO LOOP DE DESENHO ---
 
         if max_time < 0:
             max_time = getattr(self.simulator, "time", 1)
@@ -635,10 +648,10 @@ class App(tk.Tk):
         entry_algo.grid(row=2, column=1, sticky=tk.EW, padx=5)
         entry_algo.insert(0, "SRTF")
         
-        Label(form_frame, text="Quantum (0=N/A):").grid(row=3, column=0, sticky=tk.W, pady=5)
+        Label(form_frame, text="Quantum (1=N/A):").grid(row=3, column=0, sticky=tk.W, pady=5)
         entry_quantum = Entry(form_frame)
         entry_quantum.grid(row=3, column=1, sticky=tk.EW, padx=5)
-        entry_quantum.insert(0, "0")
+        entry_quantum.insert(2, "2")
         
         Label(form_frame, text="Duração Min:").grid(row=4, column=0, sticky=tk.W, pady=5)
         entry_dur_min = Entry(form_frame)
@@ -658,7 +671,7 @@ class App(tk.Tk):
         Label(form_frame, text="Prob. I/O (%):").grid(row=7, column=0, sticky=tk.W, pady=5)
         entry_io_prob = Entry(form_frame)
         entry_io_prob.grid(row=7, column=1, sticky=tk.EW, padx=5)
-        entry_io_prob.insert(0, "30")
+        entry_io_prob.insert(0, "0")
         
         form_frame.columnconfigure(1, weight=1)
         
