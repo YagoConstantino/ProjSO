@@ -6,11 +6,10 @@ pyinstaller
 # ========================================
 # DEPENDÊNCIAS DO PROJETO
 # ========================================
-#
-# Este projeto NÃO requer dependências externas!
-# Usa apenas bibliotecas padrão do Python 3.8+
-#
-# Bibliotecas utilizadas (todas incluídas no Python):
+# Pillow: Necessário para exportar o gráfico de Gantt em PNG
+pillow
+
+# Bibliotecas padrão utilizadas (incluídas no Python):
 # - tkinter: Interface gráfica
 # - random: Geração de números aleatórios
 # - typing: Type hints

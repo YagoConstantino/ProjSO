@@ -285,7 +285,7 @@ class App(tk.Tk):
         self.gantt_canvas.config(scrollregion=(0, 0, x_end + 50, eixo_y + 40))
 
     def export_gantt_ps(self):
-        """Exporta o gráfico de Gantt como arquivo PostScript (sem dependências externas)."""
+        """Exporta o gráfico de Gantt como arquivo PNG."""
         if not self.simulator:
             messagebox.showwarning("Aviso", "Nenhuma simulação carregada.")
             return
@@ -293,9 +293,9 @@ class App(tk.Tk):
         try:
             # Solicita local para salvar
             filepath = filedialog.asksaveasfilename(
-                defaultextension=".ps",
-                filetypes=[("PostScript Files", "*.ps"), ("All Files", "*.*")],
-                initialfile="gantt_chart.ps"
+                defaultextension=".png",
+                filetypes=[("PNG Files", "*.png"), ("All Files", "*.*")],
+                initialfile="gantt_chart.png"
             )
             
             if not filepath:
@@ -304,15 +304,52 @@ class App(tk.Tk):
             # Atualiza a região de scroll para capturar todo o conteúdo
             self.gantt_canvas.update_idletasks()
             
-            # Salva usando PostScript nativo do Tkinter (sem dependências externas)
-            self.gantt_canvas.postscript(file=filepath, colormode='color')
+            try:
+                # Método 1: Tentar usar ghostscript via PIL para converter PS->PNG
+                from PIL import Image
+                import tempfile
+                import os
+                
+                # Gera PostScript temporário
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.ps', delete=False) as tmp:
+                    ps_file = tmp.name
+                    self.gantt_canvas.postscript(file=ps_file, colormode='color')
+                
+                # Converte PS para PNG usando PIL
+                try:
+                    img = Image.open(ps_file)
+                    img.save(filepath, 'PNG')
+                    os.unlink(ps_file)  # Remove arquivo temporário
+                    messagebox.showinfo("Sucesso", f"Gantt exportado para:\n{filepath}")
+                    return
+                except Exception as e_pil:
+                    # Se falhar, tenta método alternativo
+                    os.unlink(ps_file)
+                    raise e_pil
             
-            messagebox.showinfo("Sucesso", 
-                f"Gantt exportado para:\n{filepath}\n\n"
-                "Arquivo PostScript (.ps) pode ser:\n"
-                "• Visualizado com leitores PS/PDF\n"
-                "• Convertido para PNG online\n"
-                "• Impresso diretamente")
+            except (ImportError, Exception) as e:
+                # Fallback: usa captura de tela do widget usando tkinter
+                try:
+                    import tempfile
+                    import os
+                    
+                    # Salva como PostScript e tenta converter usando ferramenta externa
+                    ps_data = self.gantt_canvas.postscript(colormode='color')
+                    ps_filepath = filepath.rsplit('.', 1)[0] + '.ps'
+                    
+                    with open(ps_filepath, 'w') as f:
+                        f.write(ps_data)
+                    
+                    messagebox.showwarning("Conversão Limitada", 
+                        f"Ghostscript não disponível para conversão direta.\n"
+                        f"Gantt salvo como PostScript:\n{ps_filepath}\n\n"
+                        f"Para converter para PNG:\n"
+                        f"1. Instale Ghostscript: https://ghostscript.com/\n"
+                        f"2. Ou use conversor online\n"
+                        f"3. Ou abra o .ps em visualizador e exporte como PNG")
+                
+                except Exception as e2:
+                    messagebox.showerror("Erro", f"Erro ao exportar Gantt:\n{e2}")
         
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao exportar Gantt:\n{e}")
