@@ -773,7 +773,7 @@ class App(tk.Tk):
         Label(form_frame, text="Quantum (0=N/A):").grid(row=3, column=0, sticky=tk.W, pady=5)
         entry_quantum = Entry(form_frame)
         entry_quantum.grid(row=3, column=1, sticky=tk.EW, padx=5)
-        entry_quantum.insert(0, "0")
+        entry_quantum.insert(0, "2")
         
         Label(form_frame, text="Duração Min:").grid(row=4, column=0, sticky=tk.W, pady=5)
         entry_dur_min = Entry(form_frame)
@@ -793,7 +793,7 @@ class App(tk.Tk):
         Label(form_frame, text="Prob. I/O (%):").grid(row=7, column=0, sticky=tk.W, pady=5)
         entry_io_prob = Entry(form_frame)
         entry_io_prob.grid(row=7, column=1, sticky=tk.EW, padx=5)
-        entry_io_prob.insert(0, "30")
+        entry_io_prob.insert(0, "0")
         
         form_frame.columnconfigure(1, weight=1)
         
