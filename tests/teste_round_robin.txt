@@ -1,0 +1,6 @@
+RR;3
+#id;cor_id;ingresso;duracao;prioridade
+t01;0;0;7;1
+t02;1;0;5;1
+t03;2;0;3;1
+t04;3;2;4;1

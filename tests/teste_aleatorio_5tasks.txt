@@ -1,0 +1,7 @@
+FIFO;0
+#id;cor_id;ingresso;duracao;prioridade;io_events
+t01;6;20;1;5
+t02;5;5;9;1
+t03;5;9;8;5
+t04;3;18;10;3
+t05;5;8;9;9;IO:1-3;IO:2-2

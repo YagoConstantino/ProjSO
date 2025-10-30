@@ -1,0 +1,6 @@
+SRTF;0
+#id;cor_id;ingresso;duracao;prioridade;io_events
+t01;0;0;8;5;IO:3-2
+t02;1;2;5;3;IO:2-1
+t03;2;4;6;4
+t04;3;1;4;2;IO:1-2
