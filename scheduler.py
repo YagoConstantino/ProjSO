@@ -123,9 +123,9 @@ class RoundRobinScheduler(Scheduler):
             return None
         
         # Se há tarefa em execução e ainda tem quantum, continua
-        if current_task and self.time_slice_remaining > 0:
+        if current_task and current_task in ready_queue and self.time_slice_remaining > 0:
             return current_task
         
         # Quantum esgotado ou sem tarefa atual: pega a próxima da fila
-        # Note: o simulador deve mover a tarefa atual para o fim da fila
+        # A tarefa atual preemptada já foi movida para o fim da fila pelo simulador
         return ready_queue.head

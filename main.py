@@ -8,6 +8,37 @@ from config_loader import load_simulation_config
 from scheduler import FIFOScheduler, SRTFScheduler, PriorityScheduler, RoundRobinScheduler
 from simulador import Simulator
 import random
+import os
+import sys
+
+# Configurar PATH do Ghostscript embutido (para executável PyInstaller)
+def setup_ghostscript_path():
+    """Adiciona o Ghostscript embutido ao PATH se existir."""
+    if getattr(sys, 'frozen', False):
+        # Executável PyInstaller
+        bundle_dir = sys._MEIPASS
+    else:
+        # Script Python normal
+        bundle_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    gs_bin_path = os.path.join(bundle_dir, 'ghostscript', 'bin')
+    
+    if os.path.exists(gs_bin_path):
+        # Adiciona ao PATH
+        os.environ['PATH'] = gs_bin_path + os.pathsep + os.environ.get('PATH', '')
+        print(f"✓ Ghostscript embutido encontrado: {gs_bin_path}")
+        
+        # Configura GS_LIB (necessário para o Ghostscript funcionar)
+        gs_lib_path = os.path.join(bundle_dir, 'ghostscript', 'lib')
+        if os.path.exists(gs_lib_path):
+            os.environ['GS_LIB'] = gs_lib_path
+            print(f"✓ GS_LIB configurado: {gs_lib_path}")
+        
+        return True
+    return False
+
+# Configura o Ghostscript ao iniciar
+setup_ghostscript_path()
 
 # Mapeamento de nomes de algoritmos para classes de escalonadores
 SCHEDULER_FACTORY = {
@@ -285,8 +316,13 @@ class App(tk.Tk):
         self.gantt_canvas.config(scrollregion=(0, 0, x_end + 50, eixo_y + 40))
 
     def export_gantt_ps(self):
-        """Exporta o gráfico de Gantt como arquivo PNG."""
+        """Exporta o gráfico de Gantt como arquivo PNG usando múltiplos métodos."""
+        print("\n" + "="*60)
+        print("💾 EXPORTANDO GRÁFICO DE GANTT (PNG)")
+        print("="*60)
+        
         if not self.simulator:
+            print("❌ Nenhuma simulação carregada\n")
             messagebox.showwarning("Aviso", "Nenhuma simulação carregada.")
             return
         
@@ -299,60 +335,122 @@ class App(tk.Tk):
             )
             
             if not filepath:
+                print("❌ Operação cancelada pelo usuário\n")
                 return
+            
+            print(f"📁 Salvando em: {filepath}")
             
             # Atualiza a região de scroll para capturar todo o conteúdo
             self.gantt_canvas.update_idletasks()
             
-            try:
-                # Método 1: Tentar usar ghostscript via PIL para converter PS->PNG
-                from PIL import Image
-                import tempfile
-                import os
-                
-                # Gera PostScript temporário
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.ps', delete=False) as tmp:
-                    ps_file = tmp.name
-                    self.gantt_canvas.postscript(file=ps_file, colormode='color')
-                
-                # Converte PS para PNG usando PIL
-                try:
-                    img = Image.open(ps_file)
-                    img.save(filepath, 'PNG')
-                    os.unlink(ps_file)  # Remove arquivo temporário
-                    messagebox.showinfo("Sucesso", f"Gantt exportado para:\n{filepath}")
-                    return
-                except Exception as e_pil:
-                    # Se falhar, tenta método alternativo
-                    os.unlink(ps_file)
-                    raise e_pil
+            # Tenta Método 1: ImageGrab (captura de tela - Windows)
+            if self._try_imagegrab_export(filepath):
+                return
             
-            except (ImportError, Exception) as e:
-                # Fallback: usa captura de tela do widget usando tkinter
-                try:
-                    import tempfile
-                    import os
-                    
-                    # Salva como PostScript e tenta converter usando ferramenta externa
-                    ps_data = self.gantt_canvas.postscript(colormode='color')
-                    ps_filepath = filepath.rsplit('.', 1)[0] + '.ps'
-                    
-                    with open(ps_filepath, 'w') as f:
-                        f.write(ps_data)
-                    
-                    messagebox.showwarning("Conversão Limitada", 
-                        f"Ghostscript não disponível para conversão direta.\n"
-                        f"Gantt salvo como PostScript:\n{ps_filepath}\n\n"
-                        f"Para converter para PNG:\n"
-                        f"1. Instale Ghostscript: https://ghostscript.com/\n"
-                        f"2. Ou use conversor online\n"
-                        f"3. Ou abra o .ps em visualizador e exporte como PNG")
-                
-                except Exception as e2:
-                    messagebox.showerror("Erro", f"Erro ao exportar Gantt:\n{e2}")
+            # Tenta Método 2: PostScript + Ghostscript (PIL)
+            if self._try_ghostscript_export(filepath):
+                return
+            
+            # Se nenhum método funcionou
+            print("❌ Nenhum método de exportação disponível funcionou")
+            print("="*60 + "\n")
+            messagebox.showerror("Erro", 
+                "Não foi possível exportar o Gantt.\n\n"
+                "Métodos tentados:\n"
+                "1. ImageGrab (captura de tela)\n"
+                "2. Ghostscript + PIL\n\n"
+                "Instale Pillow: pip install pillow")
         
         except Exception as e:
+            print(f"❌ Erro inesperado: {e}")
+            print("="*60 + "\n")
             messagebox.showerror("Erro", f"Erro ao exportar Gantt:\n{e}")
+    
+    def _try_imagegrab_export(self, filepath):
+        """Método 1: Usa PIL ImageGrab para capturar o canvas (Windows)."""
+        try:
+            from PIL import ImageGrab
+            
+            print("🔄 Tentando método 1: ImageGrab (captura de tela)...")
+            
+            # Força atualização visual
+            self.gantt_canvas.update()
+            
+            # Obtém as coordenadas do canvas na tela
+            x = self.gantt_canvas.winfo_rootx()
+            y = self.gantt_canvas.winfo_rooty()
+            x1 = x + self.gantt_canvas.winfo_width()
+            y1 = y + self.gantt_canvas.winfo_height()
+            
+            # Captura a região do canvas
+            img = ImageGrab.grab(bbox=(x, y, x1, y1))
+            img.save(filepath, 'PNG')
+            
+            print(f"✅ Gantt exportado com sucesso! (Método: ImageGrab)")
+            print("="*60 + "\n")
+            
+            messagebox.showinfo("Sucesso", 
+                f"Gantt exportado para:\n{filepath}\n\n"
+                f"Método: Captura de tela (ImageGrab)")
+            return True
+        
+        except ImportError:
+            print("⚠️  ImageGrab não disponível (requer Pillow)")
+            return False
+        except Exception as e:
+            print(f"⚠️  ImageGrab falhou: {e}")
+            return False
+    
+    def _try_ghostscript_export(self, filepath):
+        """Método 2: Usa PostScript + Ghostscript via PIL."""
+        try:
+            from PIL import Image
+            import tempfile
+            import os
+            
+            print("🔄 Tentando método 2: PostScript + Ghostscript...")
+            
+            # Gera PostScript temporário
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.ps', delete=False) as tmp:
+                ps_file = tmp.name
+                self.gantt_canvas.postscript(file=ps_file, colormode='color')
+            
+            # Converte PS para PNG usando PIL (requer Ghostscript)
+            img = Image.open(ps_file)
+            img.save(filepath, 'PNG')
+            os.unlink(ps_file)  # Remove arquivo temporário
+            
+            print(f"✅ Gantt exportado com sucesso! (Método: Ghostscript)")
+            print("="*60 + "\n")
+            
+            messagebox.showinfo("Sucesso", 
+                f"Gantt exportado para:\n{filepath}\n\n"
+                f"Método: PostScript + Ghostscript")
+            return True
+        
+        except ImportError:
+            print("⚠️  PIL não disponível")
+            return False
+        except Exception as e:
+            print(f"⚠️  Ghostscript falhou: {e}")
+            print("   Nota: Este método requer Ghostscript instalado")
+            print("   Instale: winget install --id Artifex.Ghostscript -e")
+            return False
+            print("="*60 + "\n")
+            messagebox.showerror("Erro", 
+                "PIL/Pillow não está instalado.\n\n"
+                "Para exportar como PNG, instale:\n"
+                "pip install pillow")
+        
+        except Exception as e:
+            print(f"❌ Erro ao exportar Gantt: {e}")
+            print("   Nota: PIL requer Ghostscript instalado no sistema")
+            print("   Instale: winget install --id Artifex.Ghostscript -e")
+            print("="*60 + "\n")
+            messagebox.showerror("Erro", 
+                f"Erro ao exportar Gantt:\n{e}\n\n"
+                f"PIL/Pillow requer Ghostscript para converter PS→PNG.\n"
+                f"Instale com: winget install --id Artifex.Ghostscript -e")
 
     # Função para criar tarefas novas
 

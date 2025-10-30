@@ -1,36 +1,33 @@
 # ========================================
-# DEPENDÊNCIAS PARA BUILD DO EXECUTÁVEL
+# BUILD DEPENDENCIES
 # ========================================
 pyinstaller
 
 # ========================================
-# DEPENDÊNCIAS DO PROJETO
+# PROJECT DEPENDENCIES
 # ========================================
-# Pillow: Necessário para exportar o gráfico de Gantt em PNG
+# Pillow: Required for exporting Gantt chart as PNG
 pillow
 
-# Bibliotecas padrão utilizadas (incluídas no Python):
-# - tkinter: Interface gráfica
-# - random: Geração de números aleatórios
+# Standard libraries (included in Python):
+# - tkinter: GUI interface
+# - random: Random number generation
 # - typing: Type hints
-# - dataclasses: Estruturas de dados
-# - os, sys: Operações de sistema
+# - dataclasses: Data structures
+# - os, sys: System operations
 #
 # ========================================
-# INSTALAÇÃO E EXECUÇÃO
+# INSTALLATION
 # ========================================
 #
 # Windows:
-#   python --version       (verificar Python 3.8+)
-#   python -m tkinter      (testar interface gráfica)
-#   python main.py         (executar simulador)
+#   python --version
+#   python -m pip install -r requirements.txt
+#   python main.py
 #
 # Linux/macOS:
 #   python3 --version
-#   python3 -m tkinter
-#   sudo apt install python3-tk  (Ubuntu/Debian, se necessário)
+#   python3 -m pip install -r requirements.txt
 #   python3 main.py
 #
-# ========================================
-# NENHUMA INSTALAÇÃO ADICIONAL NECESSÁRIA
 # ========================================

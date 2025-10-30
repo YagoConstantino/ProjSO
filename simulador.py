@@ -4,7 +4,7 @@ Gerencia a execução das tarefas, eventos de I/O e coleta de estatísticas.
 """
 
 from tasks import TCB, TCBQueue
-from scheduler import Scheduler
+from scheduler import Scheduler, RoundRobinScheduler
 from typing import List, Optional
 
 class Simulator:
@@ -118,20 +118,28 @@ class Simulator:
         # 2. Desbloqueia tarefas que completaram I/O
         self._check_io_unblock()
         
-        # 3. Seleciona a próxima tarefa a executar
+        # 3. Verifica preempção por quantum esgotado (Round-Robin)
+        if isinstance(self.scheduler, RoundRobinScheduler):
+            if self.current_task and self.scheduler.time_slice_remaining <= 0 and self.current_task.tempo_restante > 0:
+                # Quantum esgotado: move tarefa atual para o fim da fila
+                self.ready_queue.remove(self.current_task)
+                self.ready_queue.push_back(self.current_task)
+                # Força troca de contexto
+                self.current_task.state = 2  # Volta para pronto
+                self.current_task.fimExec = self.time
+                self.current_task.somaExec += (self.time - self.current_task.inicioExec)
+                self.current_task = None
+        
+        # 4. Seleciona a próxima tarefa a executar
         next_task = self.scheduler.select_next_task(self.ready_queue, self.current_task, self.time)
         
-        # 4. Gerencia troca de contexto
+        # 5. Gerencia troca de contexto
         if self.current_task != next_task:
             # Tarefa atual foi preemptada ou terminou
             if self.current_task:
                 self.current_task.state = 2  # Volta para pronto
                 self.current_task.fimExec = self.time
                 self.current_task.somaExec += (self.time - self.current_task.inicioExec)
-                
-                # Reseta quantum no escalonador
-                if hasattr(self.scheduler, 'reset_quantum'):
-                    self.scheduler.reset_quantum()
             
             # Nova tarefa entra em execução
             self.current_task = next_task
@@ -139,8 +147,12 @@ class Simulator:
                 self.current_task.state = 3  # Estado: Executando
                 self.current_task.inicioExec = self.time
                 self.current_task.ativacoes += 1
+                
+                # Reseta quantum para a nova tarefa
+                if hasattr(self.scheduler, 'reset_quantum'):
+                    self.scheduler.reset_quantum()
         
-        # 5. Executa a tarefa atual
+        # 6. Executa a tarefa atual
         if self.current_task:
             # Executa por 1 unidade de tempo
             self.current_task.tempo_restante -= 1

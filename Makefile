@@ -46,12 +46,26 @@ install: $(VENV_DIR)/pyvenv.cfg
 	@echo "-> Instalando dependencias (pyinstaller)..."
 	$(VENV_PIP) install -r requirements.txt
 
-# Constrói o executável standalone
+# Constrói o executável standalone (SEM Ghostscript embutido)
 build: install
 	@echo "-> Construindo o executavel standalone..."
 	$(VENV_PYINSTALLER) --onefile --windowed --name=$(APP_NAME) $(MAIN_SCRIPT)
 	@echo "------------------------------------------------------"
 	@echo "-> Build concluido!"
+	@echo "-> Seu executavel esta em: dist/$(APP_NAME).exe"
+	@echo "------------------------------------------------------"
+	@echo ""
+	@echo "AVISO: Ghostscript NAO foi embutido!"
+	@echo "Usuarios precisarao instalar Ghostscript para exportar PNG."
+	@echo "Para build COM Ghostscript embutido, use: make build-full"
+	@echo ""
+
+# Constrói o executável COM Ghostscript embutido (recomendado para distribuição)
+build-full: install
+	@echo "-> Construindo executavel COM Ghostscript embutido..."
+	$(PYTHON_CMD) build_with_ghostscript.py
+	@echo "------------------------------------------------------"
+	@echo "-> Build completo concluido!"
 	@echo "-> Seu executavel esta em: dist/$(APP_NAME).exe"
 	@echo "------------------------------------------------------"
 
@@ -81,23 +95,28 @@ clean-all: clean
 
 # Alvo 'help' para listar os comandos
 # Adiciona .PHONY para garantir que 'help' sempre execute
-.PHONY: all install build run test clean clean-all help
+.PHONY: all install build build-full run test clean clean-all help
 help:
 	@echo "=========================================="
 	@echo "  SIMULADOR DE SISTEMA OPERACIONAL"
 	@echo "=========================================="
 	@echo ""
 	@echo "Comandos disponiveis:"
-	@echo "  make           - (Padrao) Cria venv, instala e gera .exe"
-	@echo "  make build     - Gera o executavel .exe"
-	@echo "  make install   - Cria venv e instala dependencias"
-	@echo "  make run       - Executa direto sem build"
-	@echo "  make test      - Executa os testes"
-	@echo "  make clean     - Remove arquivos de build"
-	@echo "  make clean-all - Remove tudo (incluindo venv)"
-	@echo "  make help      - Mostra esta ajuda"
+	@echo "  make             - (Padrao) Cria venv, instala e gera .exe"
+	@echo "  make build       - Gera executavel SEM Ghostscript"
+	@echo "  make build-full  - Gera executavel COM Ghostscript (RECOMENDADO)"
+	@echo "  make install     - Cria venv e instala dependencias"
+	@echo "  make run         - Executa direto sem build"
+	@echo "  make test        - Executa os testes"
+	@echo "  make clean       - Remove arquivos de build"
+	@echo "  make clean-all   - Remove tudo (incluindo venv)"
+	@echo "  make help        - Mostra esta ajuda"
+	@echo ""
+	@echo "Build Recomendado para Distribuicao:"
+	@echo "  make build-full  -> Gera .exe com Ghostscript embutido"
+	@echo "  Usuarios NAO precisarao instalar Ghostscript!"
 	@echo ""
 	@echo "Fluxo completo:"
-	@echo "  1. make          -> Gera dist/SimuladorEscalonamento.exe"
+	@echo "  1. make build-full  -> Gera dist/SimuladorEscalonamento.exe"
 	@echo "  2. Execute o .exe da pasta dist/"
 	@echo ""
