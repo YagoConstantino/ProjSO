@@ -43,17 +43,27 @@ $(VENV_DIR)/pyvenv.cfg:
 # Instala as dependências do requirements.txt
 # Depende que o arquivo marcador do venv exista
 install: $(VENV_DIR)/pyvenv.cfg
-	@echo "-> Instalando dependências (pyinstaller)..."
+	@echo "-> Instalando dependencias (pyinstaller)..."
 	$(VENV_PIP) install -r requirements.txt
 
 # Constrói o executável standalone
 build: install
-	@echo "-> Construindo o executável standalone..."
+	@echo "-> Construindo o executavel standalone..."
 	$(VENV_PYINSTALLER) --onefile --windowed --name=$(APP_NAME) $(MAIN_SCRIPT)
 	@echo "------------------------------------------------------"
-	@echo "-> Build concluído!"
-	@echo "-> Seu executável está em: dist/"
+	@echo "-> Build concluido!"
+	@echo "-> Seu executavel esta em: dist/$(APP_NAME).exe"
 	@echo "------------------------------------------------------"
+
+# Executa o simulador diretamente (sem build)
+run:
+	@echo "-> Executando simulador diretamente..."
+	$(PYTHON_CMD) $(MAIN_SCRIPT)
+
+# Executa os testes
+test:
+	@echo "-> Executando testes automatizados..."
+	$(PYTHON_CMD) tests/test_suite.py
 
 # Limpa os arquivos gerados pelo PyInstaller (de forma multiplataforma)
 clean:
@@ -61,21 +71,33 @@ clean:
 	$(CLEAN_BUILD)
 	$(CLEAN_DIST)
 	$(CLEAN_SPEC)
-	@echo "-> Limpeza concluída."
+	@echo "-> Limpeza concluida."
 
 # Alvo para remover o ambiente virtual também
 clean-all: clean
 	@echo "-> Removendo ambiente virtual..."
 	$(CLEAN_VENV)
-	@echo "-> Limpeza total concluída."
+	@echo "-> Limpeza total concluida."
 
 # Alvo 'help' para listar os comandos
 # Adiciona .PHONY para garantir que 'help' sempre execute
-.PHONY: all install build clean clean-all help
+.PHONY: all install build run test clean clean-all help
 help:
-	@echo "Comandos disponíveis:"
-	@echo "  make all       - (Padrão) Cria o ambiente virtual, instala e constrói o app."
-	@echo "  make build     - Apenas constrói o app (requer 'make install' primeiro)."
-	@echo "  make install   - Cria o venv e instala as dependências."
-	@echo "  make clean     - Remove os arquivos de build (dist/, build/, *.spec)."
-	@echo "  make clean-all - Remove tudo, incluindo o ambiente virtual."
+	@echo "=========================================="
+	@echo "  SIMULADOR DE SISTEMA OPERACIONAL"
+	@echo "=========================================="
+	@echo ""
+	@echo "Comandos disponiveis:"
+	@echo "  make           - (Padrao) Cria venv, instala e gera .exe"
+	@echo "  make build     - Gera o executavel .exe"
+	@echo "  make install   - Cria venv e instala dependencias"
+	@echo "  make run       - Executa direto sem build"
+	@echo "  make test      - Executa os testes"
+	@echo "  make clean     - Remove arquivos de build"
+	@echo "  make clean-all - Remove tudo (incluindo venv)"
+	@echo "  make help      - Mostra esta ajuda"
+	@echo ""
+	@echo "Fluxo completo:"
+	@echo "  1. make          -> Gera dist/SimuladorEscalonamento.exe"
+	@echo "  2. Execute o .exe da pasta dist/"
+	@echo ""

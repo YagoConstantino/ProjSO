@@ -1,3 +1,37 @@
-# requirements.txt
+# ========================================
+# DEPENDÊNCIAS PARA BUILD DO EXECUTÁVEL
+# ========================================
 pyinstaller
-Pillow
+
+# ========================================
+# DEPENDÊNCIAS DO PROJETO
+# ========================================
+#
+# Este projeto NÃO requer dependências externas!
+# Usa apenas bibliotecas padrão do Python 3.8+
+#
+# Bibliotecas utilizadas (todas incluídas no Python):
+# - tkinter: Interface gráfica
+# - random: Geração de números aleatórios
+# - typing: Type hints
+# - dataclasses: Estruturas de dados
+# - os, sys: Operações de sistema
+#
+# ========================================
+# INSTALAÇÃO E EXECUÇÃO
+# ========================================
+#
+# Windows:
+#   python --version       (verificar Python 3.8+)
+#   python -m tkinter      (testar interface gráfica)
+#   python main.py         (executar simulador)
+#
+# Linux/macOS:
+#   python3 --version
+#   python3 -m tkinter
+#   sudo apt install python3-tk  (Ubuntu/Debian, se necessário)
+#   python3 main.py
+#
+# ========================================
+# NENHUMA INSTALAÇÃO ADICIONAL NECESSÁRIA
+# ========================================

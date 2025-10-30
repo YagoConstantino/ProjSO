@@ -1,13 +1,9 @@
 import tkinter as tk
-# <--- ALTERAÇÃO: Importando mais componentes do tkinter ---
 from tkinter import (
     filedialog, Canvas, Label, Frame, 
     Toplevel, Entry, Button, Text, messagebox
 )
-# <--- FIM DA ALTERAÇÃO ---
 
-# Supondo que seus outros arquivos (config_loader, scheduler, simulador) 
-# estão no mesmo diretório ou acessíveis.
 from config_loader import load_simulation_config
 from scheduler import FIFOScheduler, SRTFScheduler, PriorityScheduler, RoundRobinScheduler
 from simulador import Simulator
@@ -67,7 +63,7 @@ class App(tk.Tk):
         self.btn_stats.pack(side=tk.LEFT, padx=5)
         
         # Botão "Exportar Gantt"
-        self.btn_export_gantt = tk.Button(control_frame, text="💾 Salvar Gantt PNG", command=self.export_gantt_png, state=tk.DISABLED)
+        self.btn_export_gantt = tk.Button(control_frame, text="💾 Salvar Gantt", command=self.export_gantt_ps, state=tk.DISABLED)
         self.btn_export_gantt.pack(side=tk.LEFT, padx=5)
         
         # Frame para exibir o status
@@ -288,8 +284,8 @@ class App(tk.Tk):
 
         self.gantt_canvas.config(scrollregion=(0, 0, x_end + 50, eixo_y + 40))
 
-    def export_gantt_png(self):
-        """Exporta o gráfico de Gantt como imagem PNG."""
+    def export_gantt_ps(self):
+        """Exporta o gráfico de Gantt como arquivo PostScript (sem dependências externas)."""
         if not self.simulator:
             messagebox.showwarning("Aviso", "Nenhuma simulação carregada.")
             return
@@ -297,34 +293,26 @@ class App(tk.Tk):
         try:
             # Solicita local para salvar
             filepath = filedialog.asksaveasfilename(
-                defaultextension=".png",
-                filetypes=[("PNG Files", "*.png"), ("All Files", "*.*")],
-                initialfile="gantt_chart.png"
+                defaultextension=".ps",
+                filetypes=[("PostScript Files", "*.ps"), ("All Files", "*.*")],
+                initialfile="gantt_chart.ps"
             )
             
             if not filepath:
                 return
             
-            # Captura o canvas como PostScript e converte para PNG
-            # Obtém as coordenadas da área visível do canvas
-            x1 = self.gantt_canvas.winfo_rootx()
-            y1 = self.gantt_canvas.winfo_rooty()
-            x2 = x1 + self.gantt_canvas.winfo_width()
-            y2 = y1 + self.gantt_canvas.winfo_height()
+            # Atualiza a região de scroll para capturar todo o conteúdo
+            self.gantt_canvas.update_idletasks()
             
-            # Usa PIL para capturar e salvar
-            try:
-                from PIL import ImageGrab
-                img = ImageGrab.grab(bbox=(x1, y1, x2, y2))
-                img.save(filepath, "PNG")
-                messagebox.showinfo("Sucesso", f"Gantt exportado para:\n{filepath}")
-            except ImportError:
-                # Fallback: salva como PostScript
-                ps_file = filepath.replace(".png", ".ps")
-                self.gantt_canvas.postscript(file=ps_file, colormode='color')
-                messagebox.showinfo("Aviso", 
-                    f"PIL não disponível. Arquivo salvo como PostScript:\n{ps_file}\n\n"
-                    "Para converter para PNG, instale o Pillow:\npip install Pillow")
+            # Salva usando PostScript nativo do Tkinter (sem dependências externas)
+            self.gantt_canvas.postscript(file=filepath, colormode='color')
+            
+            messagebox.showinfo("Sucesso", 
+                f"Gantt exportado para:\n{filepath}\n\n"
+                "Arquivo PostScript (.ps) pode ser:\n"
+                "• Visualizado com leitores PS/PDF\n"
+                "• Convertido para PNG online\n"
+                "• Impresso diretamente")
         
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao exportar Gantt:\n{e}")
