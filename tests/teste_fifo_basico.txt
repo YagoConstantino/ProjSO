@@ -1,5 +1,0 @@
-FIFO;0
-#id;cor_id;ingresso;duracao;prioridade
-t01;0;0;5;1
-t02;1;2;3;2
-t03;2;4;4;3

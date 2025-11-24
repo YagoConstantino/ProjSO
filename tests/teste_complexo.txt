@@ -1,6 +1,0 @@
-PRIO;0
-#id;cor_id;ingresso;duracao;prioridade;io_events
-t01;0;0;10;3;IO:4-3
-t02;1;2;6;5;IO:2-2
-t03;2;5;4;2
-t04;3;8;5;4;IO:1-1;IO:3-2
