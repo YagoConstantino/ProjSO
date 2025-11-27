@@ -96,6 +96,9 @@ class App(tk.Tk):
         # Botão "Exportar Gantt"
         self.btn_export_gantt = tk.Button(control_frame, text="💾 Salvar Gantt", command=self.export_gantt_ps, state=tk.DISABLED)
         self.btn_export_gantt.pack(side=tk.LEFT, padx=5)
+        self.btn_export_svg = tk.Button(control_frame, text="🖼️ Exportar SVG", command=self.export_gantt_svg, state=tk.DISABLED)
+        self.btn_export_svg.pack(side=tk.LEFT, padx=5)
+
         
         # Frame para exibir o status
         status_frame = Frame(self, pady=5)
@@ -129,15 +132,31 @@ class App(tk.Tk):
         self.tasks_table.pack(fill=tk.BOTH, expand=True)
         table_scrollbar.config(command=self.tasks_table.yview)
 
-        # Canvas para o Gráfico de Gantt
-        self.gantt_canvas = Canvas(self, bg="white", scrollregion=(0, 0, 2000, 400))
-        self.gantt_canvas.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
-        
-        # Adicionar scrollbar horizontal
+       # ===== SCROLLABLE GANTT CONTAINER =====
+        gantt_container = Frame(self)
+        gantt_container.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
+
+        # Canvas dentro de um frame próprio
+        self.gantt_canvas = Canvas(gantt_container, bg="white")
+        self.gantt_canvas.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
+
+        # Scrollbar vertical
+        vbar = tk.Scrollbar(gantt_container, orient=tk.VERTICAL)
+        vbar.pack(side=tk.RIGHT, fill=tk.Y)
+        vbar.config(command=self.gantt_canvas.yview)
+
+        # Scrollbar horizontal
         hbar = tk.Scrollbar(self, orient=tk.HORIZONTAL)
         hbar.pack(side=tk.BOTTOM, fill=tk.X)
         hbar.config(command=self.gantt_canvas.xview)
-        self.gantt_canvas.config(xscrollcommand=hbar.set)
+
+        # Vincular scroll do canvas
+        self.gantt_canvas.config(
+            yscrollcommand=vbar.set,
+            xscrollcommand=hbar.set,
+            scrollregion=(0, 0, 2000, 2000)
+        )
+
 
 
 
@@ -211,6 +230,9 @@ class App(tk.Tk):
                 messagebox.showinfo("Simulação Completa", "A simulação foi concluída!")
                 self.show_statistics()
 
+        self.btn_export_svg.config(state=tk.NORMAL)
+
+
 
     def run_all(self):
         """Executa a simulação completa até o fim."""
@@ -223,6 +245,107 @@ class App(tk.Tk):
             self.btn_export_gantt.config(state=tk.NORMAL)
             messagebox.showinfo("Simulação Completa", "A simulação foi concluída com sucesso!")
             self.show_statistics()
+
+        self.btn_export_svg.config(state=tk.NORMAL)
+
+    def export_gantt_svg(self):
+        if not self.simulator:
+            messagebox.showwarning("Aviso", "Nenhuma simulação carregada.")
+            return
+
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".svg",
+            filetypes=[("SVG", "*.svg")],
+            initialfile="gantt_chart.svg",
+        )
+        if not filepath:
+            return
+
+        # Atualiza o canvas e descobre o tamanho real
+        self.gantt_canvas.update_idletasks()
+        bbox = self.gantt_canvas.bbox("all")
+        if not bbox:
+            messagebox.showerror("Erro", "Nada para exportar.")
+            return
+
+        x0, y0, x1, y1 = bbox
+
+        self._save_canvas_as_svg(filepath, x0, y0, x1, y1)
+
+
+    def _save_canvas_as_svg(self, filepath, x0, y0, x1, y1):
+            import xml.etree.ElementTree as ET
+
+            width = x1 - x0
+            height = y1 - y0
+
+            svg = ET.Element(
+                "svg",
+                width=str(width),
+                height=str(height),
+                version="1.1",
+                xmlns="http://www.w3.org/2000/svg"
+            )
+
+            # Exportar cada item do canvas
+            for item in self.gantt_canvas.find_all():
+                item_type = self.gantt_canvas.type(item)
+                coords = self.gantt_canvas.coords(item)
+
+                # Ajustar coordenadas pela origem da área total
+                adj = [(coords[i] - (x0 if i % 2 == 0 else y0)) for i in range(len(coords))]
+
+                if item_type == "rectangle":
+                    fill = self.gantt_canvas.itemcget(item, "fill")
+                    outline = self.gantt_canvas.itemcget(item, "outline")
+                    stroke_w = self.gantt_canvas.itemcget(item, "width")
+
+                    x, y, x2, y2 = adj
+
+                    ET.SubElement(
+                        svg, "rect",
+                        x=str(x),
+                        y=str(y),
+                        width=str(x2 - x),
+                        height=str(y2 - y),
+                        fill=fill if fill else "none",
+                        stroke=outline,
+                        **{"stroke-width": stroke_w}
+                    )
+
+                elif item_type == "line":
+                    x1c, y1c, x2c, y2c = adj
+                    ET.SubElement(
+                        svg, "line",
+                        x1=str(x1c),
+                        y1=str(y1c),
+                        x2=str(x2c),
+                        y2=str(y2c),
+                        stroke="black",
+                        **{"stroke-width": "1"}
+                    )
+
+                elif item_type == "text":
+                    text_value = self.gantt_canvas.itemcget(item, "text")
+                    x, y = adj
+
+                    text_el = ET.SubElement(
+                        svg, "text",
+                        x=str(x),
+                        y=str(y),
+                        fill="black",
+                        **{"font-size": "12"}
+                    )
+                    text_el.text = text_value
+
+            # Salvar com indentação bonita
+            import xml.dom.minidom as md
+            pretty = md.parseString(ET.tostring(svg)).toprettyxml()
+
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write(pretty)
+
+            messagebox.showinfo("Sucesso", f"Gantt exportado como SVG em:\n{filepath}")
 
 
     def update_ui(self):
@@ -284,11 +407,40 @@ class App(tk.Tk):
                 # Define cor (sempre usa a cor da tarefa)
                 color = f"#{rgb_color[0]:02x}{rgb_color[1]:02x}{rgb_color[2]:02x}"
                 
-                # Desenha retângulo com borda preta padrão
+                # Decide aparência conforme estado
+                if state == "EXEC":
+                    fill_color = color              # tarefa executando
+                    outline_color = "black"
+                    width_val = 1
+
+                elif state == "IO":
+                    fill_color = "#bfbfbf"          # cinza para I/O
+                    outline_color = "black"
+                    width_val = 1
+
+                elif state == "READY":
+                    fill_color = ""                 # transparente
+                    outline_color = "black"
+                    width_val = 1
+
+                elif state == "IDLE":
+                    fill_color = "#e0e0e0"          # CPU ociosa
+                    outline_color = "black"
+                    width_val = 1
+
+                else:
+                    fill_color = color              # fallback
+                    outline_color = "black"
+                    width_val = 1
+
                 self.gantt_canvas.create_rectangle(
-                    x_start, y_pos - 15, x_start + block_width, y_pos + 15,
-                    fill=color, outline="black", width=1
+                    x_start, y_pos - 15,
+                    x_start + block_width, y_pos + 15,
+                    fill=fill_color,
+                    outline=outline_color,
+                    width=width_val
                 )
+
 
         if max_time < 0:
             max_time = getattr(self.simulator, "time", 1)

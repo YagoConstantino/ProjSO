@@ -114,9 +114,15 @@ class Simulator:
 
         # 1. Processa chegada de novas tarefas
         self._check_for_new_arrivals()
+        # Registrar tarefas prontas (state = 2)
+        for t in self.ready_queue:
+            self.gantt_data.append((self.time, t.id, t.RGB, "READY"))
         
         # 2. Desbloqueia tarefas que completaram I/O
         self._check_io_unblock()
+        # Registrar novamente tarefas prontas após desbloquear I/O
+        for t in self.ready_queue:
+            self.gantt_data.append((self.time, t.id, t.RGB, "READY"))
         
         # 3. Verifica preempção por quantum esgotado (Round-Robin)
         if isinstance(self.scheduler, RoundRobinScheduler):
