@@ -1,0 +1,6 @@
+SRTF;3
+#id;cor_hex;ingresso;duracao;prioridade;eventos
+t01;ff0000;0;5;10
+t02;00ff00;2;3;8;IO:1-2
+t03;0000ff;4;4;5;ML:1;MU:3
+t04;ffff00;1;6;3;IO:2-1;ML:0;MU:4

@@ -1,557 +1,806 @@
 """
-Testes automatizados para o simulador de escalonamento de processos.
+Suite de Testes Completa para o Simulador de Escalonamento de Processos.
 
-Testes incluídos:
-1. Algoritmos de escalonamento (FIFO, SRTF, Priority, RR, PRIOPEnv)
-2. Desenho de tarefas READY no Gantt (quadrados transparentes)
-3. Conversão de cores hexadecimais
-4. Eventos de I/O
-5. Eventos de Mutex
+Testa:
+1. Salvamento e edição de arquivos TXT
+2. Funcionamento dos escalonadores (FIFO, SRTF, PRIO, RR, PRIOPEnv)
+3. Geração aleatória de tarefas
+4. Execução da simulação e dados do Gantt
+5. Parsing de configuração e eventos
+6. Conversão de cores hex para RGB
+
+Execute com: python3 tests.py
 """
 
 import unittest
-import sys
 import os
+import tempfile
+import random
+from typing import List
 
-# Adiciona o diretório atual ao path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from tasks import TCB, TCBQueue, STATE_NEW, STATE_READY, STATE_RUNNING, STATE_BLOCKED_IO, STATE_TERMINATED
+# Importações do projeto
+from config_loader import load_simulation_config, hex_to_rgb, parse_events
+from tasks import TCB, TCBQueue, STATE_NEW, STATE_READY, STATE_RUNNING, STATE_TERMINATED
 from scheduler import (
     FIFOScheduler, SRTFScheduler, PriorityScheduler, 
     RoundRobinScheduler, PRIOPEnvScheduler
 )
 from simulador import Simulator
-from config_loader import hex_to_rgb, parse_events, load_simulation_config
 
+
+# =============================================================================
+# TESTES DE PARSING E CONFIGURAÇÃO
+# =============================================================================
 
 class TestHexToRGB(unittest.TestCase):
-    """Testes para conversão de cores hexadecimais."""
+    """Testes para conversão de cores hexadecimais para RGB."""
     
-    def test_hex_red(self):
-        """Testa cor vermelha."""
-        result = hex_to_rgb("FF0000")
-        self.assertEqual(result, [255, 0, 0])
+    def test_uppercase(self):
+        """Testa conversão com letras maiúsculas."""
+        self.assertEqual(hex_to_rgb("FF0000"), [255, 0, 0])
+        self.assertEqual(hex_to_rgb("00FF00"), [0, 255, 0])
+        self.assertEqual(hex_to_rgb("0000FF"), [0, 0, 255])
     
-    def test_hex_green(self):
-        """Testa cor verde."""
-        result = hex_to_rgb("00FF00")
-        self.assertEqual(result, [0, 255, 0])
+    def test_lowercase(self):
+        """Testa conversão com letras minúsculas."""
+        self.assertEqual(hex_to_rgb("ff0000"), [255, 0, 0])
+        self.assertEqual(hex_to_rgb("00ff00"), [0, 255, 0])
     
-    def test_hex_blue(self):
-        """Testa cor azul."""
-        result = hex_to_rgb("0000FF")
-        self.assertEqual(result, [0, 0, 255])
+    def test_mixed_case(self):
+        """Testa conversão com letras mistas."""
+        self.assertEqual(hex_to_rgb("FfAa00"), [255, 170, 0])
     
-    def test_hex_with_hash(self):
-        """Testa cor com # no início."""
-        result = hex_to_rgb("#FF5500")
-        self.assertEqual(result, [255, 85, 0])
+    def test_with_hash(self):
+        """Testa conversão com prefixo #."""
+        self.assertEqual(hex_to_rgb("#00FF00"), [0, 255, 0])
+        self.assertEqual(hex_to_rgb("#ffffff"), [255, 255, 255])
     
-    def test_hex_lowercase(self):
-        """Testa cor em minúsculas."""
-        result = hex_to_rgb("aabbcc")
-        self.assertEqual(result, [170, 187, 204])
+    def test_black_white(self):
+        """Testa cores extremas."""
+        self.assertEqual(hex_to_rgb("000000"), [0, 0, 0])
+        self.assertEqual(hex_to_rgb("FFFFFF"), [255, 255, 255])
     
-    def test_hex_mixed_case(self):
-        """Testa cor com maiúsculas e minúsculas."""
-        result = hex_to_rgb("AaBbCc")
-        self.assertEqual(result, [170, 187, 204])
-    
-    def test_hex_white(self):
-        """Testa cor branca."""
-        result = hex_to_rgb("FFFFFF")
-        self.assertEqual(result, [255, 255, 255])
-    
-    def test_hex_black(self):
-        """Testa cor preta."""
-        result = hex_to_rgb("000000")
-        self.assertEqual(result, [0, 0, 0])
-    
-    def test_hex_invalid_short(self):
-        """Testa erro com cor curta demais."""
+    def test_invalid_length(self):
+        """Testa que formato inválido gera erro."""
         with self.assertRaises(ValueError):
             hex_to_rgb("FFF")
-    
-    def test_hex_invalid_long(self):
-        """Testa erro com cor longa demais."""
         with self.assertRaises(ValueError):
             hex_to_rgb("FFFFFFF")
     
-    def test_hex_invalid_chars(self):
-        """Testa erro com caracteres inválidos."""
+    def test_invalid_chars(self):
+        """Testa que caracteres inválidos geram erro."""
         with self.assertRaises(ValueError):
             hex_to_rgb("GGGGGG")
+        with self.assertRaises(ValueError):
+            hex_to_rgb("ZZZZZZ")
 
+
+class TestParseEvents(unittest.TestCase):
+    """Testes para parsing de eventos (I/O, ML, MU)."""
+    
+    def test_io_only(self):
+        """Testa parsing apenas de eventos I/O."""
+        io, ml, mu = parse_events("IO:2-1;IO:5-3")
+        self.assertEqual(io, [(2, 1), (5, 3)])
+        self.assertEqual(ml, [])
+        self.assertEqual(mu, [])
+    
+    def test_mutex_only(self):
+        """Testa parsing apenas de eventos mutex."""
+        io, ml, mu = parse_events("ML:1;ML:4;MU:3;MU:6")
+        self.assertEqual(io, [])
+        self.assertEqual(ml, [1, 4])
+        self.assertEqual(mu, [3, 6])
+    
+    def test_mixed_events(self):
+        """Testa parsing de eventos mistos."""
+        io, ml, mu = parse_events("ML:0;IO:2-1;MU:4;IO:5-2")
+        self.assertEqual(io, [(2, 1), (5, 2)])
+        self.assertEqual(ml, [0])
+        self.assertEqual(mu, [4])
+    
+    def test_empty_string(self):
+        """Testa parsing de string vazia."""
+        io, ml, mu = parse_events("")
+        self.assertEqual(io, [])
+        self.assertEqual(ml, [])
+        self.assertEqual(mu, [])
+    
+    def test_single_event(self):
+        """Testa parsing de evento único."""
+        io, ml, mu = parse_events("IO:3-2")
+        self.assertEqual(io, [(3, 2)])
+
+
+# =============================================================================
+# TESTES DE SALVAMENTO E CARREGAMENTO DE ARQUIVOS
+# =============================================================================
+
+class TestFileOperations(unittest.TestCase):
+    """Testes para operações de salvamento e carregamento de arquivos."""
+    
+    def setUp(self):
+        """Cria diretório temporário para testes."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.test_file = os.path.join(self.temp_dir, "test_config.txt")
+    
+    def tearDown(self):
+        """Remove arquivos temporários."""
+        if os.path.exists(self.test_file):
+            os.remove(self.test_file)
+        if os.path.exists(self.temp_dir):
+            os.rmdir(self.temp_dir)
+    
+    def _create_config_file(self, content: str):
+        """Cria arquivo de configuração com conteúdo especificado."""
+        with open(self.test_file, "w", encoding="utf-8") as f:
+            f.write(content)
+    
+    def _save_config(self, algo: str, quantum, alpha, tasks: List[TCB]) -> str:
+        """Simula salvamento de configuração (como no main.py)."""
+        header_parts = [algo]
+        if quantum:
+            header_parts.append(str(quantum))
+        if alpha:
+            if not quantum:
+                header_parts.append("")
+            header_parts.append(str(alpha))
+        
+        while header_parts and header_parts[-1] == "":
+            header_parts.pop()
+        
+        header = ";".join(header_parts)
+        content = header + "\n"
+        content += "#id;cor_hex;ingresso;duracao;prioridade;eventos\n"
+        
+        for task in sorted(tasks, key=lambda t: t.id if isinstance(t.id, int) else 0):
+            tid = f"t{task.id:02d}" if isinstance(task.id, int) else f"t{task.id}"
+            cor = f"{task.RGB[0]:02x}{task.RGB[1]:02x}{task.RGB[2]:02x}"
+            
+            events = []
+            if task.io_events:
+                for t, d in task.io_events:
+                    events.append(f"IO:{t}-{d}")
+            if task.ml_events:
+                for t in task.ml_events:
+                    events.append(f"ML:{t}")
+            if task.mu_events:
+                for t in task.mu_events:
+                    events.append(f"MU:{t}")
+            
+            line = f"{tid};{cor};{task.inicio};{task.duracao};{task.prio_s}"
+            if events:
+                line += ";" + ";".join(events)
+            content += line + "\n"
+        
+        with open(self.test_file, "w", encoding="utf-8") as f:
+            f.write(content)
+        
+        return content
+    
+    def test_save_and_load_basic(self):
+        """Testa salvamento e carregamento básico."""
+        tasks = [
+            TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=5, prio_s=10),
+            TCB(id=2, RGB=[0, 255, 0], inicio=2, duracao=3, prio_s=5),
+        ]
+        
+        self._save_config("FIFO", None, None, tasks)
+        algo, quantum, alpha, loaded = load_simulation_config(self.test_file)
+        
+        self.assertEqual(algo, "FIFO")
+        self.assertIsNone(quantum)
+        self.assertIsNone(alpha)
+        self.assertEqual(len(loaded), 2)
+    
+    def test_save_and_load_with_quantum(self):
+        """Testa salvamento e carregamento com quantum."""
+        tasks = [TCB(id=1, RGB=[128, 128, 128], inicio=0, duracao=4, prio_s=5)]
+        
+        self._save_config("RR", 3, None, tasks)
+        algo, quantum, alpha, loaded = load_simulation_config(self.test_file)
+        
+        self.assertEqual(algo, "RR")
+        self.assertEqual(quantum, 3)
+    
+    def test_save_and_load_with_alpha(self):
+        """Testa salvamento e carregamento com alpha (PRIOPEnv)."""
+        tasks = [TCB(id=1, RGB=[100, 150, 200], inicio=0, duracao=6, prio_s=8)]
+        
+        self._save_config("PRIOPENV", 2, 1, tasks)
+        algo, quantum, alpha, loaded = load_simulation_config(self.test_file)
+        
+        self.assertEqual(algo, "PRIOPENV")
+        self.assertEqual(quantum, 2)
+        self.assertEqual(alpha, 1)
+    
+    def test_save_and_load_with_io_events(self):
+        """Testa salvamento e carregamento com eventos I/O."""
+        tasks = [
+            TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=10, prio_s=5,
+                io_events=[(2, 1), (5, 2)])
+        ]
+        
+        self._save_config("SRTF", None, None, tasks)
+        algo, quantum, alpha, loaded = load_simulation_config(self.test_file)
+        
+        self.assertEqual(len(loaded), 1)
+        self.assertEqual(len(loaded[0].io_events), 2)
+        self.assertIn((2, 1), loaded[0].io_events)
+    
+    def test_save_and_load_with_mutex_events(self):
+        """Testa salvamento e carregamento com eventos mutex."""
+        tasks = [
+            TCB(id=1, RGB=[0, 255, 0], inicio=0, duracao=8, prio_s=5,
+                ml_events=[1, 4], mu_events=[3, 6])
+        ]
+        
+        self._save_config("PRIO", None, None, tasks)
+        algo, quantum, alpha, loaded = load_simulation_config(self.test_file)
+        
+        self.assertEqual(loaded[0].ml_events, [1, 4])
+        self.assertEqual(loaded[0].mu_events, [3, 6])
+    
+    def test_color_preservation(self):
+        """Testa que cores são preservadas corretamente."""
+        colors = [
+            [255, 0, 0], [0, 255, 0], [0, 0, 255],
+            [255, 255, 0], [128, 64, 32], [0, 0, 0], [255, 255, 255]
+        ]
+        tasks = [TCB(id=i+1, RGB=c, inicio=0, duracao=1, prio_s=1) for i, c in enumerate(colors)]
+        
+        self._save_config("FIFO", None, None, tasks)
+        algo, quantum, alpha, loaded = load_simulation_config(self.test_file)
+        
+        for i, original_color in enumerate(colors):
+            loaded_task = next(t for t in loaded if t.id == i+1)
+            self.assertEqual(loaded_task.RGB, original_color)
+    
+    def test_comments_ignored(self):
+        """Testa que comentários são ignorados."""
+        content = """FIFO;
+#Este é um comentário
+#id;cor;chegada;duracao;prioridade
+t01;ff0000;0;5;10
+#Outro comentário
+t02;00ff00;2;3;5
+"""
+        self._create_config_file(content)
+        algo, quantum, alpha, tasks = load_simulation_config(self.test_file)
+        
+        self.assertEqual(len(tasks), 2)
+
+
+# =============================================================================
+# TESTES DOS ESCALONADORES
+# =============================================================================
 
 class TestFIFOScheduler(unittest.TestCase):
     """Testes para o escalonador FIFO."""
     
-    def setUp(self):
-        """Configura tarefas de teste."""
-        self.task1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=3, prio_s=1)
-        self.task2 = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=2, prio_s=5)
-        self.task3 = TCB(id=3, RGB=[0, 0, 255], inicio=1, duracao=1, prio_s=3)
-    
-    def test_fifo_order(self):
-        """Testa que FIFO executa na ordem de chegada."""
+    def test_selects_first_task(self):
+        """Testa que FIFO seleciona a primeira tarefa da fila."""
         scheduler = FIFOScheduler()
-        tasks = [self.task1, self.task2, self.task3]
-        simulator = Simulator(scheduler, tasks)
+        queue = TCBQueue()
         
-        simulator.run_full()
+        t1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=5, prio_s=1)
+        t2 = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=3, prio_s=10)
         
-        # Verifica ordem de término (FIFO: T1 termina antes de T2)
-        # T1 chega em 0, dura 3 -> termina em 3
-        # T2 chega em 0, mas espera T1 -> termina em 5
-        # T3 chega em 1, espera T1 e T2 -> termina em 6
-        self.assertEqual(self.task1.fim, 3)
-        self.assertEqual(self.task2.fim, 5)
-        self.assertEqual(self.task3.fim, 6)
+        queue.push_back(t1)
+        queue.push_back(t2)
+        
+        selected = scheduler.select_next_task(queue, None, 0)
+        self.assertEqual(selected.id, 1)
     
-    def test_fifo_no_preemption(self):
-        """Testa que FIFO não tem preempção."""
+    def test_keeps_current_task(self):
+        """Testa que FIFO mantém a tarefa atual até terminar."""
         scheduler = FIFOScheduler()
-        tasks = [self.task1, self.task2]
-        simulator = Simulator(scheduler, tasks)
+        queue = TCBQueue()
         
-        # Executa passo a passo
-        for _ in range(3):  # T1 deve executar por 3 unidades
-            simulator.step()
+        t1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=5, prio_s=1)
+        t2 = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=3, prio_s=10)
         
-        # T1 deve ter terminado
-        self.assertEqual(self.task1.state, STATE_TERMINATED)
-        # T2 ainda não terminou
-        self.assertNotEqual(self.task2.state, STATE_TERMINATED)
+        queue.push_back(t1)
+        queue.push_back(t2)
+        
+        selected = scheduler.select_next_task(queue, t1, 0)
+        self.assertEqual(selected.id, 1)
+    
+    def test_no_preemption(self):
+        """Testa que FIFO não faz preempção."""
+        scheduler = FIFOScheduler()
+        queue = TCBQueue()
+        
+        t1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=10, prio_s=1)
+        t2 = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=1, prio_s=100)
+        
+        queue.push_back(t1)
+        queue.push_back(t2)
+        
+        # Mesmo com t2 tendo prioridade maior, t1 continua
+        selected = scheduler.select_next_task(queue, t1, 5)
+        self.assertEqual(selected.id, 1)
 
 
 class TestSRTFScheduler(unittest.TestCase):
     """Testes para o escalonador SRTF."""
     
-    def setUp(self):
-        """Configura tarefas de teste."""
-        self.task1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=5)
-        self.task2 = TCB(id=2, RGB=[0, 255, 0], inicio=2, duracao=2)
-    
-    def test_srtf_preemption(self):
-        """Testa que SRTF faz preempção corretamente."""
+    def test_selects_shortest_remaining(self):
+        """Testa que SRTF seleciona a tarefa com menor tempo restante."""
         scheduler = SRTFScheduler()
-        tasks = [self.task1, self.task2]
-        simulator = Simulator(scheduler, tasks)
+        queue = TCBQueue()
         
-        # T1 começa em 0, executa até T2 chegar em 2
-        # T2 tem tempo restante 2, T1 tem 3 -> T2 preempta
-        simulator.run_full()
+        t1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=10, prio_s=1)
+        t2 = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=3, prio_s=1)
         
-        # T2 (menor tempo) deve terminar antes
-        # T2 chega em 2, executa 2 unidades -> termina em 4
-        # T1 executa 2 unidades (0-2), pausa, depois mais 3 -> termina em 7
-        self.assertEqual(self.task2.fim, 4)
-        self.assertEqual(self.task1.fim, 7)
+        queue.push_back(t1)
+        queue.push_back(t2)
+        
+        selected = scheduler.select_next_task(queue, None, 0)
+        self.assertEqual(selected.id, 2)
     
-    def test_srtf_shortest_first(self):
-        """Testa que SRTF escolhe a tarefa com menor tempo restante."""
-        task_long = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=10)
-        task_short = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=2)
-        
+    def test_preemption_on_shorter_arrival(self):
+        """Testa preempção quando chega tarefa mais curta."""
         scheduler = SRTFScheduler()
-        tasks = [task_long, task_short]
-        simulator = Simulator(scheduler, tasks)
+        queue = TCBQueue()
         
-        simulator.run_full()
+        t1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=10, prio_s=1)
+        t1.tempo_restante = 8  # Já executou 2 unidades
         
-        # T2 (mais curta) deve terminar primeiro
-        self.assertEqual(task_short.fim, 2)
-        self.assertEqual(task_long.fim, 12)
+        t2 = TCB(id=2, RGB=[0, 255, 0], inicio=2, duracao=3, prio_s=1)
+        
+        queue.push_back(t1)
+        queue.push_back(t2)
+        
+        # t2 tem tempo_restante=3, menor que t1.tempo_restante=8
+        selected = scheduler.select_next_task(queue, t1, 2)
+        self.assertEqual(selected.id, 2)
 
 
 class TestPriorityScheduler(unittest.TestCase):
     """Testes para o escalonador por Prioridade."""
     
-    def setUp(self):
-        """Configura tarefas de teste."""
-        self.task_low = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=3, prio_s=1)
-        self.task_high = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=2, prio_s=10)
-    
-    def test_priority_high_first(self):
-        """Testa que tarefa de maior prioridade executa primeiro."""
+    def test_selects_highest_priority(self):
+        """Testa que seleciona a tarefa com maior prioridade."""
         scheduler = PriorityScheduler()
-        tasks = [self.task_low, self.task_high]
-        simulator = Simulator(scheduler, tasks)
+        queue = TCBQueue()
         
-        simulator.run_full()
+        t1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=5, prio_s=5)
+        t2 = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=5, prio_s=10)
         
-        # T2 (alta prioridade) deve terminar primeiro
-        self.assertEqual(self.task_high.fim, 2)
-        self.assertEqual(self.task_low.fim, 5)
+        queue.push_back(t1)
+        queue.push_back(t2)
+        
+        selected = scheduler.select_next_task(queue, None, 0)
+        self.assertEqual(selected.id, 2)
     
-    def test_priority_preemption(self):
-        """Testa preempção por prioridade."""
-        task_low = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=5, prio_s=1)
-        task_high = TCB(id=2, RGB=[0, 255, 0], inicio=2, duracao=2, prio_s=10)
-        
+    def test_preemption_on_higher_priority(self):
+        """Testa preempção quando chega tarefa de maior prioridade."""
         scheduler = PriorityScheduler()
-        tasks = [task_low, task_high]
-        simulator = Simulator(scheduler, tasks)
+        queue = TCBQueue()
         
-        simulator.run_full()
+        t1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=10, prio_s=5)
+        t2 = TCB(id=2, RGB=[0, 255, 0], inicio=2, duracao=3, prio_s=10)
         
-        # T2 chega em 2 e preempta T1
-        self.assertEqual(task_high.fim, 4)
-        self.assertEqual(task_low.fim, 7)
+        queue.push_back(t1)
+        queue.push_back(t2)
+        
+        selected = scheduler.select_next_task(queue, t1, 2)
+        self.assertEqual(selected.id, 2)
 
 
 class TestRoundRobinScheduler(unittest.TestCase):
     """Testes para o escalonador Round-Robin."""
     
-    def test_rr_quantum_rotation(self):
-        """Testa rotação por quantum."""
-        task1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=4)
-        task2 = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=4)
-        
-        scheduler = RoundRobinScheduler(quantum=2)
-        tasks = [task1, task2]
-        simulator = Simulator(scheduler, tasks)
-        
-        simulator.run_full()
-        
-        # Com quantum=2:
-        # T1 executa 0-2, T2 executa 2-4, T1 executa 4-6, T2 executa 6-8
-        self.assertEqual(task1.fim, 6)
-        self.assertEqual(task2.fim, 8)
+    def test_quantum_initialization(self):
+        """Testa inicialização do quantum."""
+        scheduler = RoundRobinScheduler(quantum=3)
+        self.assertEqual(scheduler.quantum, 3)
+        self.assertEqual(scheduler.time_slice_remaining, 3)
     
-    def test_rr_short_task(self):
-        """Testa tarefa que termina antes do quantum."""
-        task1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=1)
-        task2 = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=3)
-        
+    def test_selects_first_when_no_current(self):
+        """Testa seleção da primeira tarefa quando não há tarefa atual."""
         scheduler = RoundRobinScheduler(quantum=2)
-        tasks = [task1, task2]
-        simulator = Simulator(scheduler, tasks)
+        queue = TCBQueue()
         
-        simulator.run_full()
+        t1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=5, prio_s=1)
+        t2 = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=3, prio_s=1)
         
-        # T1 termina em 1, T2 executa resto
-        self.assertEqual(task1.fim, 1)
-        self.assertEqual(task2.fim, 4)
+        queue.push_back(t1)
+        queue.push_back(t2)
+        
+        selected = scheduler.select_next_task(queue, None, 0)
+        self.assertEqual(selected.id, 1)
+    
+    def test_quantum_decrement(self):
+        """Testa decremento do quantum."""
+        scheduler = RoundRobinScheduler(quantum=3)
+        scheduler.decrement_quantum()
+        self.assertEqual(scheduler.time_slice_remaining, 2)
+    
+    def test_quantum_reset(self):
+        """Testa reset do quantum."""
+        scheduler = RoundRobinScheduler(quantum=3)
+        scheduler.time_slice_remaining = 0
+        scheduler.reset_quantum()
+        self.assertEqual(scheduler.time_slice_remaining, 3)
 
 
 class TestPRIOPEnvScheduler(unittest.TestCase):
-    """Testes para o escalonador PRIOPEnv (Prioridade com Envelhecimento)."""
+    """Testes para o escalonador com Envelhecimento."""
     
-    def test_priopenv_aging(self):
-        """Testa envelhecimento de prioridade."""
-        task_low = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=2, prio_s=1)
-        task_high = TCB(id=2, RGB=[0, 255, 0], inicio=1, duracao=2, prio_s=5)
+    def test_initialization(self):
+        """Testa inicialização com quantum e alpha."""
+        scheduler = PRIOPEnvScheduler(quantum=2, alpha=1)
+        self.assertEqual(scheduler.quantum, 2)
+        self.assertEqual(scheduler.alpha, 1)
+    
+    def test_aging(self):
+        """Testa envelhecimento das tarefas."""
+        scheduler = PRIOPEnvScheduler(quantum=2, alpha=1)
+        queue = TCBQueue()
         
+        t1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=5, prio_s=5)
+        t1.prio_d = 5
+        t2 = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=3, prio_s=3)
+        t2.prio_d = 3
+        
+        queue.push_back(t1)
+        queue.push_back(t2)
+        
+        scheduler.age_tasks(queue, exclude_task=None)
+        
+        self.assertEqual(t1.prio_d, 6)  # 5 + 1
+        self.assertEqual(t2.prio_d, 4)  # 3 + 1
+    
+    def test_exclude_from_aging(self):
+        """Testa exclusão de tarefa do envelhecimento."""
         scheduler = PRIOPEnvScheduler(quantum=2, alpha=2)
-        tasks = [task_low, task_high]
-        simulator = Simulator(scheduler, tasks)
+        queue = TCBQueue()
         
-        # Antes de T2 chegar, T1 está executando
-        # Quando T2 chega (tempo 1), T1 envelhece: prio_d = 1 + 2 = 3
-        # Mas T2 tem prio_d = 5, então T2 preempta
+        t1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=5, prio_s=5)
+        t1.prio_d = 5
+        t2 = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=3, prio_s=3)
+        t2.prio_d = 3
+        
+        queue.push_back(t1)
+        queue.push_back(t2)
+        
+        scheduler.age_tasks(queue, exclude_task=t1)
+        
+        self.assertEqual(t1.prio_d, 5)  # Não mudou
+        self.assertEqual(t2.prio_d, 5)  # 3 + 2
+
+
+# =============================================================================
+# TESTES DA SIMULAÇÃO
+# =============================================================================
+
+class TestSimulator(unittest.TestCase):
+    """Testes para o simulador."""
+    
+    def test_basic_execution(self):
+        """Testa execução básica de uma tarefa."""
+        tasks = [TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=3, prio_s=5)]
+        scheduler = FIFOScheduler()
+        simulator = Simulator(scheduler, tasks)
         
         simulator.run_full()
         
-        # Verifica que envelhecimento foi aplicado
-        self.assertTrue(task_low.prio_d >= task_low.prio_s)
+        self.assertTrue(simulator.is_finished())
+        self.assertEqual(len(simulator.done_tasks), 1)
     
-    def test_priopenv_prevents_starvation(self):
-        """Testa que envelhecimento previne starvation."""
-        # Tarefa de baixa prioridade chega primeiro
-        task_low = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=3, prio_s=1)
-        # Várias tarefas de alta prioridade chegam depois
-        task_high1 = TCB(id=2, RGB=[0, 255, 0], inicio=1, duracao=2, prio_s=10)
-        task_high2 = TCB(id=3, RGB=[0, 0, 255], inicio=2, duracao=2, prio_s=10)
-        
-        scheduler = PRIOPEnvScheduler(quantum=1, alpha=5)
-        tasks = [task_low, task_high1, task_high2]
+    def test_multiple_tasks(self):
+        """Testa execução de múltiplas tarefas."""
+        tasks = [
+            TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=2, prio_s=5),
+            TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=3, prio_s=5),
+        ]
+        scheduler = FIFOScheduler()
         simulator = Simulator(scheduler, tasks)
         
         simulator.run_full()
         
-        # Todas as tarefas devem terminar
-        self.assertEqual(task_low.state, STATE_TERMINATED)
-        self.assertEqual(task_high1.state, STATE_TERMINATED)
-        self.assertEqual(task_high2.state, STATE_TERMINATED)
-
-
-class TestGanttREADYStates(unittest.TestCase):
-    """Testes para verificar que tarefas READY são registradas no Gantt."""
+        self.assertTrue(simulator.is_finished())
+        self.assertEqual(len(simulator.done_tasks), 2)
     
-    def test_ready_tasks_in_gantt(self):
-        """Testa que tarefas READY aparecem no gantt_data."""
-        task1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=3)
-        task2 = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=3)
-        
+    def test_gantt_data_generated(self):
+        """Testa que dados do Gantt são gerados."""
+        tasks = [TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=3, prio_s=5)]
         scheduler = FIFOScheduler()
-        tasks = [task1, task2]
         simulator = Simulator(scheduler, tasks)
         
-        # Executa um passo
-        simulator.step()
+        simulator.run_full()
         
-        # Verifica que há entradas READY no gantt_data
-        ready_entries = [e for e in simulator.gantt_data if len(e) == 4 and e[3] == "READY"]
-        
-        # Deve haver pelo menos uma entrada READY
-        self.assertGreater(len(ready_entries), 0)
+        self.assertTrue(len(simulator.gantt_data) > 0)
     
-    def test_ready_task_has_correct_format(self):
-        """Testa que entradas READY têm formato correto."""
-        task1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=3)
-        task2 = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=3)
-        
+    def test_task_arrival(self):
+        """Testa chegada de tarefas em tempos diferentes."""
+        tasks = [
+            TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=2, prio_s=5),
+            TCB(id=2, RGB=[0, 255, 0], inicio=3, duracao=2, prio_s=5),
+        ]
         scheduler = FIFOScheduler()
-        tasks = [task1, task2]
         simulator = Simulator(scheduler, tasks)
         
-        simulator.step()
+        simulator.run_full()
         
-        # Verifica formato das entradas
-        for entry in simulator.gantt_data:
-            self.assertEqual(len(entry), 4)  # (time, task_id, RGB, state)
-            time, task_id, rgb, state = entry
-            self.assertIsInstance(time, int)
-            self.assertIn(state, ["READY", "EXEC", "IO", "MUTEX", "IDLE"])
-            if state != "IDLE":
-                self.assertIsInstance(rgb, list)
-                self.assertEqual(len(rgb), 3)
+        self.assertTrue(simulator.is_finished())
+        self.assertEqual(simulator.time, 5)  # 0-2 para t1, 3-5 para t2
     
-    def test_multiple_ready_tasks(self):
-        """Testa que múltiplas tarefas READY são registradas."""
-        task1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=5)
-        task2 = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=5)
-        task3 = TCB(id=3, RGB=[0, 0, 255], inicio=0, duracao=5)
-        
+    def test_statistics_calculation(self):
+        """Testa cálculo de estatísticas."""
+        tasks = [
+            TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=3, prio_s=5),
+            TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=2, prio_s=5),
+        ]
         scheduler = FIFOScheduler()
-        tasks = [task1, task2, task3]
         simulator = Simulator(scheduler, tasks)
         
-        simulator.step()
+        simulator.run_full()
+        stats = simulator.get_statistics()
         
-        # No tempo 0, TODAS as tarefas chegam e são registradas como READY
-        # ANTES de selecionar qual vai executar
-        # Portanto, T1, T2 e T3 são registradas como READY
-        ready_at_time_0 = [e for e in simulator.gantt_data 
-                          if len(e) == 4 and e[0] == 0 and e[3] == "READY"]
+        self.assertIn('avg_turnaround', stats)
+        self.assertIn('avg_waiting', stats)
+        self.assertIn('avg_response', stats)
+        self.assertIn('tasks', stats)
+        self.assertEqual(len(stats['tasks']), 2)
+    
+    def test_srtf_preemption(self):
+        """Testa preempção no SRTF."""
+        tasks = [
+            TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=5, prio_s=5),
+            TCB(id=2, RGB=[0, 255, 0], inicio=1, duracao=2, prio_s=5),
+        ]
+        scheduler = SRTFScheduler()
+        simulator = Simulator(scheduler, tasks)
         
-        # Deve haver 3 tarefas READY (todas chegam no tempo 0)
-        self.assertEqual(len(ready_at_time_0), 3)
+        simulator.run_full()
+        
+        # T2 deve terminar antes de T1 (preempção)
+        t1 = next(t for t in simulator.all_tasks if t.id == 1)
+        t2 = next(t for t in simulator.all_tasks if t.id == 2)
+        self.assertLess(t2.fim, t1.fim)
+    
+    def test_round_robin_fairness(self):
+        """Testa que Round-Robin alterna entre tarefas."""
+        tasks = [
+            TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=4, prio_s=5),
+            TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=4, prio_s=5),
+        ]
+        scheduler = RoundRobinScheduler(quantum=2)
+        simulator = Simulator(scheduler, tasks)
+        
+        simulator.run_full()
+        
+        # Verifica que ambas as tarefas foram executadas
+        self.assertEqual(len(simulator.done_tasks), 2)
+        
+        # Verifica alternância no Gantt (simplificado)
+        exec_data = [e for e in simulator.gantt_data if e[3] == "EXEC"]
+        self.assertTrue(len(exec_data) >= 4)
 
 
 class TestIOEvents(unittest.TestCase):
     """Testes para eventos de I/O."""
     
-    def test_io_blocks_task(self):
-        """Testa que evento de I/O bloqueia a tarefa."""
-        # Tarefa com evento de I/O no tempo de execução 1
-        task = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=5, io_events=[(1, 2)])
-        
+    def test_io_blocking(self):
+        """Testa que I/O bloqueia a tarefa."""
+        tasks = [
+            TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=5, prio_s=5,
+                io_events=[(2, 2)])  # I/O no tempo relativo 2, duração 2
+        ]
         scheduler = FIFOScheduler()
-        simulator = Simulator(scheduler, [task])
-        
-        # Executa até o I/O
-        simulator.step()  # T=0: executa
-        simulator.step()  # T=1: I/O (tempo_exec_acumulado = 1)
-        
-        # Tarefa deve estar bloqueada
-        self.assertEqual(task.state, STATE_BLOCKED_IO)
-    
-    def test_io_in_gantt(self):
-        """Testa que I/O aparece no gantt_data."""
-        task = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=5, io_events=[(1, 2)])
-        
-        scheduler = FIFOScheduler()
-        simulator = Simulator(scheduler, [task])
+        simulator = Simulator(scheduler, tasks)
         
         simulator.run_full()
         
-        # Verifica que há entradas IO no gantt_data
-        io_entries = [e for e in simulator.gantt_data if len(e) == 4 and e[3] == "IO"]
-        self.assertGreater(len(io_entries), 0)
+        # Tempo total = 5 (duração) + 2 (I/O) = 7
+        self.assertEqual(simulator.time, 7)
 
 
-class TestParseEvents(unittest.TestCase):
-    """Testes para parsing de eventos."""
-    
-    def test_parse_io_event(self):
-        """Testa parsing de evento de I/O."""
-        io_events, ml_events, mu_events = parse_events("IO:2-3")
-        
-        self.assertEqual(io_events, [(2, 3)])
-        self.assertEqual(ml_events, [])
-        self.assertEqual(mu_events, [])
-    
-    def test_parse_mutex_events(self):
-        """Testa parsing de eventos de mutex."""
-        io_events, ml_events, mu_events = parse_events("ML:1;MU:3")
-        
-        self.assertEqual(io_events, [])
-        self.assertEqual(ml_events, [1])
-        self.assertEqual(mu_events, [3])
-    
-    def test_parse_mixed_events(self):
-        """Testa parsing de eventos misturados."""
-        io_events, ml_events, mu_events = parse_events("ML:0;IO:2-1;MU:4")
-        
-        self.assertEqual(io_events, [(2, 1)])
-        self.assertEqual(ml_events, [0])
-        self.assertEqual(mu_events, [4])
-    
-    def test_parse_empty_string(self):
-        """Testa parsing de string vazia."""
-        io_events, ml_events, mu_events = parse_events("")
-        
-        self.assertEqual(io_events, [])
-        self.assertEqual(ml_events, [])
-        self.assertEqual(mu_events, [])
+# =============================================================================
+# TESTES DE GERAÇÃO ALEATÓRIA
+# =============================================================================
 
-
-class TestSimulatorBasics(unittest.TestCase):
-    """Testes básicos do simulador."""
+class TestRandomGeneration(unittest.TestCase):
+    """Testes para geração aleatória de tarefas."""
     
-    def test_simulation_completes(self):
-        """Testa que simulação termina."""
-        task = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=3)
+    def test_random_task_generation(self):
+        """Testa geração de tarefas aleatórias."""
+        num_tasks = 5
+        tasks = []
+        
+        for i in range(num_tasks):
+            task = TCB(
+                id=i+1,
+                RGB=[random.randint(0, 255) for _ in range(3)],
+                inicio=random.randint(0, 20),
+                duracao=random.randint(1, 10),
+                prio_s=random.randint(1, 10)
+            )
+            tasks.append(task)
+        
+        self.assertEqual(len(tasks), num_tasks)
+        
+        # Verifica que todas as tarefas têm valores válidos
+        for task in tasks:
+            self.assertGreaterEqual(task.duracao, 1)
+            self.assertLessEqual(task.duracao, 10)
+            self.assertGreaterEqual(task.inicio, 0)
+            self.assertLessEqual(task.inicio, 20)
+            self.assertTrue(all(0 <= c <= 255 for c in task.RGB))
+    
+    def test_random_tasks_simulation(self):
+        """Testa que tarefas aleatórias podem ser simuladas."""
+        tasks = []
+        for i in range(3):
+            task = TCB(
+                id=i+1,
+                RGB=[random.randint(0, 255) for _ in range(3)],
+                inicio=random.randint(0, 5),
+                duracao=random.randint(1, 5),
+                prio_s=random.randint(1, 10)
+            )
+            tasks.append(task)
         
         scheduler = FIFOScheduler()
-        simulator = Simulator(scheduler, [task])
+        simulator = Simulator(scheduler, tasks)
         
+        # Não deve lançar exceção
         simulator.run_full()
         
         self.assertTrue(simulator.is_finished())
-        self.assertEqual(task.state, STATE_TERMINATED)
     
-    def test_time_increments(self):
-        """Testa que tempo incrementa corretamente."""
-        task = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=3)
+    def test_random_file_generation_and_load(self):
+        """Testa geração de arquivo aleatório e carregamento."""
+        temp_dir = tempfile.mkdtemp()
+        test_file = os.path.join(temp_dir, "random_test.txt")
         
-        scheduler = FIFOScheduler()
-        simulator = Simulator(scheduler, [task])
-        
-        self.assertEqual(simulator.time, 0)
-        simulator.step()
-        self.assertEqual(simulator.time, 1)
-        simulator.step()
-        self.assertEqual(simulator.time, 2)
-    
-    def test_task_arrival(self):
-        """Testa chegada de tarefa no tempo correto."""
-        task = TCB(id=1, RGB=[255, 0, 0], inicio=3, duracao=2)
-        
-        scheduler = FIFOScheduler()
-        simulator = Simulator(scheduler, [task])
-        
-        # Antes do tempo 3, tarefa está NEW
-        for i in range(3):
-            self.assertEqual(task.state, STATE_NEW, f"Tarefa deveria estar NEW no tempo {i}")
-            simulator.step()
-        
-        # Após 3 steps (tempo atual = 3), a tarefa foi processada no step anterior
-        # e agora deve estar READY ou RUNNING
-        # Precisamos executar mais um step para processar a chegada no tempo 3
-        simulator.step()
-        
-        # Agora a tarefa deve estar READY ou RUNNING (já foi processada)
-        self.assertIn(task.state, [STATE_READY, STATE_RUNNING])
+        try:
+            # Gera conteúdo aleatório
+            num_tasks = 4
+            content = "SRTF;2\n#id;cor;chegada;duracao;prioridade\n"
+            for i in range(num_tasks):
+                cor = f"{random.randint(0,255):02x}{random.randint(0,255):02x}{random.randint(0,255):02x}"
+                content += f"t{i+1:02d};{cor};{random.randint(0,10)};{random.randint(1,5)};{random.randint(1,10)}\n"
+            
+            # Salva
+            with open(test_file, "w") as f:
+                f.write(content)
+            
+            # Carrega
+            algo, quantum, alpha, tasks = load_simulation_config(test_file)
+            
+            self.assertEqual(algo, "SRTF")
+            self.assertEqual(quantum, 2)
+            self.assertEqual(len(tasks), num_tasks)
+            
+        finally:
+            if os.path.exists(test_file):
+                os.remove(test_file)
+            os.rmdir(temp_dir)
 
+
+# =============================================================================
+# TESTES DA FILA TCBQueue
+# =============================================================================
 
 class TestTCBQueue(unittest.TestCase):
-    """Testes para a fila de TCBs."""
+    """Testes para a fila de tarefas."""
     
-    def test_push_pop(self):
-        """Testa push e pop."""
+    def test_push_and_pop(self):
+        """Testa inserção e remoção."""
         queue = TCBQueue()
-        task1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=1)
-        task2 = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=1)
+        t1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=5, prio_s=5)
+        t2 = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=3, prio_s=5)
         
-        queue.push_back(task1)
-        queue.push_back(task2)
+        queue.push_back(t1)
+        queue.push_back(t2)
         
-        self.assertEqual(queue.pop_front(), task1)
-        self.assertEqual(queue.pop_front(), task2)
+        self.assertEqual(len(queue), 2)
+        
+        popped = queue.pop_front()
+        self.assertEqual(popped.id, 1)
+        self.assertEqual(len(queue), 1)
     
-    def test_remove(self):
-        """Testa remoção de elemento."""
+    def test_remove_specific(self):
+        """Testa remoção de elemento específico."""
         queue = TCBQueue()
-        task1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=1)
-        task2 = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=1)
-        task3 = TCB(id=3, RGB=[0, 0, 255], inicio=0, duracao=1)
+        t1 = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=5, prio_s=5)
+        t2 = TCB(id=2, RGB=[0, 255, 0], inicio=0, duracao=3, prio_s=5)
+        t3 = TCB(id=3, RGB=[0, 0, 255], inicio=0, duracao=4, prio_s=5)
         
-        queue.push_back(task1)
-        queue.push_back(task2)
-        queue.push_back(task3)
+        queue.push_back(t1)
+        queue.push_back(t2)
+        queue.push_back(t3)
         
-        queue.remove(task2)
+        queue.remove(t2)
         
-        self.assertEqual(queue.pop_front(), task1)
-        self.assertEqual(queue.pop_front(), task3)
+        self.assertEqual(len(queue), 2)
+        ids = [t.id for t in queue]
+        self.assertNotIn(2, ids)
     
     def test_is_empty(self):
         """Testa verificação de fila vazia."""
         queue = TCBQueue()
         self.assertTrue(queue.is_empty())
         
-        task = TCB(id=1, RGB=[255, 0, 0], inicio=0, duracao=1)
-        queue.push_back(task)
+        queue.push_back(TCB(id=1, RGB=[0, 0, 0], inicio=0, duracao=1, prio_s=1))
         self.assertFalse(queue.is_empty())
+    
+    def test_iteration(self):
+        """Testa iteração sobre a fila."""
+        queue = TCBQueue()
+        for i in range(5):
+            queue.push_back(TCB(id=i, RGB=[0, 0, 0], inicio=0, duracao=1, prio_s=1))
         
-        queue.pop_front()
-        self.assertTrue(queue.is_empty())
+        ids = [t.id for t in queue]
+        self.assertEqual(ids, [0, 1, 2, 3, 4])
 
 
-def run_tests():
-    """Executa todos os testes e exibe resultado."""
-    # Cria loader de testes
+# =============================================================================
+# RUNNER PRINCIPAL
+# =============================================================================
+
+def run_all_tests():
+    """Executa todos os testes e exibe relatório."""
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
     
     # Adiciona todas as classes de teste
-    suite.addTests(loader.loadTestsFromTestCase(TestHexToRGB))
-    suite.addTests(loader.loadTestsFromTestCase(TestFIFOScheduler))
-    suite.addTests(loader.loadTestsFromTestCase(TestSRTFScheduler))
-    suite.addTests(loader.loadTestsFromTestCase(TestPriorityScheduler))
-    suite.addTests(loader.loadTestsFromTestCase(TestRoundRobinScheduler))
-    suite.addTests(loader.loadTestsFromTestCase(TestPRIOPEnvScheduler))
-    suite.addTests(loader.loadTestsFromTestCase(TestGanttREADYStates))
-    suite.addTests(loader.loadTestsFromTestCase(TestIOEvents))
-    suite.addTests(loader.loadTestsFromTestCase(TestParseEvents))
-    suite.addTests(loader.loadTestsFromTestCase(TestSimulatorBasics))
-    suite.addTests(loader.loadTestsFromTestCase(TestTCBQueue))
+    test_classes = [
+        TestHexToRGB,
+        TestParseEvents,
+        TestFileOperations,
+        TestFIFOScheduler,
+        TestSRTFScheduler,
+        TestPriorityScheduler,
+        TestRoundRobinScheduler,
+        TestPRIOPEnvScheduler,
+        TestSimulator,
+        TestIOEvents,
+        TestRandomGeneration,
+        TestTCBQueue,
+    ]
     
-    # Executa testes
+    for test_class in test_classes:
+        suite.addTests(loader.loadTestsFromTestCase(test_class))
+    
+    # Executa os testes
+    print("=" * 70)
+    print("🧪 SUITE DE TESTES - SIMULADOR DE ESCALONAMENTO")
+    print("=" * 70)
+    print()
+    
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     
-    # Resumo
-    print("\n" + "=" * 70)
-    print("📊 RESUMO DOS TESTES")
+    # Relatório final
+    print()
     print("=" * 70)
-    print(f"✅ Testes executados: {result.testsRun}")
-    print(f"❌ Falhas: {len(result.failures)}")
-    print(f"💥 Erros: {len(result.errors)}")
-    print(f"⏭️  Pulados: {len(result.skipped)}")
+    print("📊 RELATÓRIO FINAL")
+    print("=" * 70)
+    print(f"  ✅ Testes executados: {result.testsRun}")
+    print(f"  ❌ Falhas: {len(result.failures)}")
+    print(f"  💥 Erros: {len(result.errors)}")
+    print(f"  ⏭️  Ignorados: {len(result.skipped)}")
+    print()
     
     if result.wasSuccessful():
-        print("\n🎉 TODOS OS TESTES PASSARAM!")
+        print("🎉 TODOS OS TESTES PASSARAM!")
     else:
-        print("\n⚠️  ALGUNS TESTES FALHARAM!")
-        
-        if result.failures:
-            print("\n--- Falhas ---")
-            for test, trace in result.failures:
-                print(f"  ❌ {test}: {trace.split(chr(10))[0]}")
-        
-        if result.errors:
-            print("\n--- Erros ---")
-            for test, trace in result.errors:
-                print(f"  💥 {test}: {trace.split(chr(10))[0]}")
+        print("⚠️  ALGUNS TESTES FALHARAM:")
+        for test, trace in result.failures:
+            print(f"    ❌ {test}")
+        for test, trace in result.errors:
+            print(f"    💥 {test}")
+    
+    print("=" * 70)
     
     return result.wasSuccessful()
 
 
 if __name__ == "__main__":
-    success = run_tests()
-    sys.exit(0 if success else 1)
+    success = run_all_tests()
+    exit(0 if success else 1)

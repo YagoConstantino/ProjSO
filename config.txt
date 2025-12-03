@@ -1,0 +1,11 @@
+PRIO;2
+#id;cor_hex;ingresso;duracao;prioridade;eventos
+t01;b5636a;8;9;8
+t02;ae7af8;16;9;9
+t03;acc85a;19;6;8
+t04;f2e471;2;9;2
+t05;bd546a;9;4;5
+t06;4497b8;0;1;5
+t07;d034e2;0;1;5
+t08;fcfd82;0;1;5
+t09;1adbcd;0;1;5
