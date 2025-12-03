@@ -1,0 +1,11 @@
+RR;2
+#id;cor_id;ingresso;duracao;prioridade;eventos
+# Teste de mutex com Round-Robin (quantum=2): contenção real
+# t01: chega no tempo 0, duração 6, faz lock no tempo 1, unlock no tempo 4
+# t02: chega no tempo 0, duração 4, faz lock no tempo 0 (imediato), unlock no tempo 2
+# Com quantum=2, após 2 unidades de t01, o escalonador troca para t02
+# Quando t02 tentar ML:0, o mutex já estará com t01, causando bloqueio
+t01;0;0;6;0;ML:1;MU:4
+t02;1;0;4;0;ML:0;MU:2
+
+

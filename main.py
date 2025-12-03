@@ -59,44 +59,58 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Simulador de Escalonamento de Processos")
-        self.geometry("900x600")
+        self.geometry("1000x650")
 
         self.simulator: Simulator | None = None
+        self.loaded_tasks = []  # Lista de tarefas carregadas para edição
+        self.current_algo = None
+        self.current_quantum = None
 
         # --- Janelas popup (para evitar múltiplas instâncias) ---
         self.create_window: Toplevel | None = None
         self.task_window: Toplevel | None = None
+        self.edit_window: Toplevel | None = None
         
         # --- Layout da UI ---
-        # Frame para os controles
-        control_frame = Frame(self, pady=10)
+        # Frame para os controles (primeira linha)
+        control_frame = Frame(self, pady=5)
         control_frame.pack(fill=tk.X)
 
-        self.btn_load = tk.Button(control_frame, text="Carregar Configuração", command=self.load_file)
-        self.btn_load.pack(side=tk.LEFT, padx=10)
+        self.btn_load = tk.Button(control_frame, text="📂 Carregar", command=self.load_file)
+        self.btn_load.pack(side=tk.LEFT, padx=5)
         
-        self.btn_step = tk.Button(control_frame, text="Próximo Passo", command=self.do_step, state=tk.DISABLED)
+        self.btn_edit = tk.Button(control_frame, text="✏️ Editar Tarefas", command=self.open_edit_tasks_window, state=tk.DISABLED)
+        self.btn_edit.pack(side=tk.LEFT, padx=5)
+        
+        self.btn_step = tk.Button(control_frame, text="▶ Passo", command=self.do_step, state=tk.DISABLED)
         self.btn_step.pack(side=tk.LEFT, padx=5)
         
-        self.btn_run = tk.Button(control_frame, text="Executar Tudo", command=self.run_all, state=tk.DISABLED)
+        self.btn_run = tk.Button(control_frame, text="⏩ Executar Tudo", command=self.run_all, state=tk.DISABLED)
         self.btn_run.pack(side=tk.LEFT, padx=5)
+        
+        self.btn_reset = tk.Button(control_frame, text="🔄 Reiniciar", command=self.reset_simulation, state=tk.DISABLED)
+        self.btn_reset.pack(side=tk.LEFT, padx=5)
+
+        # Frame para controles secundários (segunda linha)
+        control_frame2 = Frame(self, pady=5)
+        control_frame2.pack(fill=tk.X)
 
         # Botão "Criar TXT"
-        self.btn_create = tk.Button(control_frame, text="Criar TXT", command=self.open_create_txt_window)
+        self.btn_create = tk.Button(control_frame2, text="📝 Criar TXT", command=self.open_create_txt_window)
         self.btn_create.pack(side=tk.LEFT, padx=5)
         
         # Botão "Gerar Teste Aleatório"
-        self.btn_random = tk.Button(control_frame, text="🎲 Teste Aleatório", command=self.generate_random_test, bg="#FFD700")
+        self.btn_random = tk.Button(control_frame2, text="🎲 Teste Aleatório", command=self.generate_random_test, bg="#FFD700")
         self.btn_random.pack(side=tk.LEFT, padx=5)
         
         # Botão "Estatísticas"
-        self.btn_stats = tk.Button(control_frame, text="📊 Estatísticas", command=self.show_statistics, state=tk.DISABLED)
+        self.btn_stats = tk.Button(control_frame2, text="📊 Estatísticas", command=self.show_statistics, state=tk.DISABLED)
         self.btn_stats.pack(side=tk.LEFT, padx=5)
         
         # Botão "Exportar Gantt"
-        self.btn_export_gantt = tk.Button(control_frame, text="💾 Salvar Gantt", command=self.export_gantt_ps, state=tk.DISABLED)
+        self.btn_export_gantt = tk.Button(control_frame2, text="💾 Salvar PNG", command=self.export_gantt_ps, state=tk.DISABLED)
         self.btn_export_gantt.pack(side=tk.LEFT, padx=5)
-        self.btn_export_svg = tk.Button(control_frame, text="🖼️ Exportar SVG", command=self.export_gantt_svg, state=tk.DISABLED)
+        self.btn_export_svg = tk.Button(control_frame2, text="🖼️ Salvar SVG", command=self.export_gantt_svg, state=tk.DISABLED)
         self.btn_export_svg.pack(side=tk.LEFT, padx=5)
 
         
@@ -174,6 +188,11 @@ class App(tk.Tk):
                 self.lbl_algo_name.config(text="Algoritmo: Erro") 
                 return
 
+            # Salva configuração para edição posterior
+            self.current_algo = algo_name
+            self.current_quantum = quantum
+            self.loaded_tasks = tasks
+
             # Instancia o escalonador com quantum (se aplicável)
             scheduler = scheduler_class(quantum=quantum) if quantum else scheduler_class()
             self.simulator = Simulator(scheduler, tasks)
@@ -182,6 +201,8 @@ class App(tk.Tk):
 
             self.btn_step.config(state=tk.NORMAL)
             self.btn_run.config(state=tk.NORMAL)
+            self.btn_edit.config(state=tk.NORMAL)
+            self.btn_reset.config(state=tk.NORMAL)
             self.btn_stats.config(state=tk.DISABLED)
             self.btn_export_gantt.config(state=tk.DISABLED)
             
@@ -232,6 +253,299 @@ class App(tk.Tk):
 
         self.btn_export_svg.config(state=tk.NORMAL)
 
+    def reset_simulation(self):
+        """Reinicia a simulação com as tarefas atuais (editadas ou não)."""
+        if not self.loaded_tasks:
+            messagebox.showwarning("Aviso", "Nenhuma configuração carregada.")
+            return
+        
+        try:
+            # Recria cópias limpas das tarefas
+            from copy import deepcopy
+            fresh_tasks = []
+            for task in self.loaded_tasks:
+                # Cria uma nova tarefa com os mesmos parâmetros
+                from tasks import TCB
+                new_task = TCB(
+                    id=task.id,
+                    RGB=task.RGB,
+                    inicio=task.inicio,
+                    duracao=task.duracao,
+                    prio_s=task.prio_s,
+                    io_events=list(task.io_events) if task.io_events else [],
+                    ml_events=list(task.ml_events) if task.ml_events else [],
+                    mu_events=list(task.mu_events) if task.mu_events else []
+                )
+                fresh_tasks.append(new_task)
+            
+            # Atualiza loaded_tasks com cópias frescas
+            self.loaded_tasks = fresh_tasks
+            
+            # Recria o simulador
+            scheduler_class = SCHEDULER_FACTORY.get(self.current_algo)
+            if scheduler_class:
+                scheduler = scheduler_class(quantum=self.current_quantum) if self.current_quantum else scheduler_class()
+                self.simulator = Simulator(scheduler, self.loaded_tasks)
+                
+                self.btn_step.config(state=tk.NORMAL)
+                self.btn_run.config(state=tk.NORMAL)
+                self.btn_stats.config(state=tk.DISABLED)
+                self.btn_export_gantt.config(state=tk.DISABLED)
+                self.btn_export_svg.config(state=tk.DISABLED)
+                
+                self.update_tasks_table(self.loaded_tasks)
+                self.update_ui()
+                messagebox.showinfo("Reiniciado", "Simulação reiniciada com sucesso!")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao reiniciar simulação:\n{e}")
+
+    def open_edit_tasks_window(self):
+        """Abre janela para editar tarefas carregadas."""
+        if not self.loaded_tasks:
+            messagebox.showwarning("Aviso", "Nenhuma tarefa carregada para editar.")
+            return
+        
+        if self.edit_window and self.edit_window.winfo_exists():
+            self.edit_window.lift()
+            return
+        
+        self.edit_window = Toplevel(self)
+        self.edit_window.title("✏️ Editar Tarefas e Configuração")
+        self.edit_window.geometry("750x550")
+        
+        # Frame de configuração do algoritmo
+        config_frame = Frame(self.edit_window, padx=10, pady=10, bg="#E8F4F8")
+        config_frame.pack(fill=tk.X)
+        
+        Label(config_frame, text="Configuração:", font=("Arial", 11, "bold"), bg="#E8F4F8").grid(row=0, column=0, sticky=tk.W)
+        
+        Label(config_frame, text="Algoritmo:", bg="#E8F4F8").grid(row=0, column=1, padx=(20, 5))
+        self.edit_algo_var = tk.StringVar(value=self.current_algo)
+        algo_combo = tk.OptionMenu(config_frame, self.edit_algo_var, "FIFO", "FCFS", "SRTF", "PRIO", "PRIOP", "RR")
+        algo_combo.grid(row=0, column=2, padx=5)
+        
+        Label(config_frame, text="Quantum:", bg="#E8F4F8").grid(row=0, column=3, padx=(20, 5))
+        self.edit_quantum_entry = Entry(config_frame, width=5)
+        self.edit_quantum_entry.grid(row=0, column=4, padx=5)
+        self.edit_quantum_entry.insert(0, str(self.current_quantum or 0))
+        
+        # Frame da lista de tarefas
+        list_frame = Frame(self.edit_window, padx=10, pady=5)
+        list_frame.pack(fill=tk.BOTH, expand=True)
+        
+        Label(list_frame, text="Tarefas (clique duas vezes para editar):", font=("Arial", 10, "bold")).pack(anchor=tk.W)
+        
+        # Treeview para lista de tarefas
+        from tkinter import ttk
+        columns = ("ID", "Cor", "Chegada", "Duração", "Prioridade", "I/O", "ML", "MU")
+        self.tasks_tree = ttk.Treeview(list_frame, columns=columns, show="headings", height=12)
+        
+        for col in columns:
+            self.tasks_tree.heading(col, text=col)
+            self.tasks_tree.column(col, width=80, anchor=tk.CENTER)
+        
+        self.tasks_tree.column("I/O", width=120)
+        self.tasks_tree.column("ML", width=80)
+        self.tasks_tree.column("MU", width=80)
+        
+        scrollbar = tk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.tasks_tree.yview)
+        self.tasks_tree.configure(yscrollcommand=scrollbar.set)
+        
+        self.tasks_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Popula a lista
+        self._populate_tasks_tree()
+        
+        # Bind double-click para edição
+        self.tasks_tree.bind("<Double-1>", self._edit_task_dialog)
+        
+        # Frame de botões
+        btn_frame = Frame(self.edit_window, padx=10, pady=10)
+        btn_frame.pack(fill=tk.X)
+        
+        Button(btn_frame, text="➕ Adicionar Tarefa", command=self._add_task_dialog).pack(side=tk.LEFT, padx=5)
+        Button(btn_frame, text="🗑️ Remover Selecionada", command=self._remove_selected_task).pack(side=tk.LEFT, padx=5)
+        Button(btn_frame, text="✅ Aplicar e Reiniciar", command=self._apply_edits, bg="#4CAF50", fg="white").pack(side=tk.RIGHT, padx=5)
+        Button(btn_frame, text="❌ Cancelar", command=self.edit_window.destroy).pack(side=tk.RIGHT, padx=5)
+
+    def _populate_tasks_tree(self):
+        """Popula a treeview com as tarefas atuais."""
+        for item in self.tasks_tree.get_children():
+            self.tasks_tree.delete(item)
+        
+        for task in sorted(self.loaded_tasks, key=lambda t: t.id):
+            io_str = ",".join([f"{t}-{d}" for t, d in task.io_events]) if task.io_events else ""
+            ml_str = ",".join([str(t) for t in task.ml_events]) if task.ml_events else ""
+            mu_str = ",".join([str(t) for t in task.mu_events]) if task.mu_events else ""
+            cor_str = f"{task.RGB[0]:02x}{task.RGB[1]:02x}{task.RGB[2]:02x}"
+            
+            self.tasks_tree.insert("", tk.END, values=(
+                task.id, cor_str, task.inicio, task.duracao, task.prio_s, io_str, ml_str, mu_str
+            ))
+
+    def _edit_task_dialog(self, event=None):
+        """Abre diálogo para editar a tarefa selecionada."""
+        selection = self.tasks_tree.selection()
+        if not selection:
+            return
+        
+        item = selection[0]
+        values = self.tasks_tree.item(item, "values")
+        task_id = values[0]
+        
+        # Encontra a tarefa
+        task = next((t for t in self.loaded_tasks if str(t.id) == str(task_id)), None)
+        if not task:
+            return
+        
+        self._open_task_edit_dialog(task, item)
+
+    def _add_task_dialog(self):
+        """Abre diálogo para adicionar nova tarefa."""
+        from tasks import TCB
+        
+        # Encontra próximo ID disponível
+        max_id = max([t.id if isinstance(t.id, int) else 0 for t in self.loaded_tasks], default=0)
+        new_id = max_id + 1
+        
+        # Cria nova tarefa com valores padrão
+        new_task = TCB(
+            id=new_id,
+            RGB=(100, 149, 237),  # Azul padrão
+            inicio=0,
+            duracao=1,
+            prio_s=5,
+            io_events=[],
+            ml_events=[],
+            mu_events=[]
+        )
+        self.loaded_tasks.append(new_task)
+        self._populate_tasks_tree()
+        
+        # Abre diálogo de edição para a nova tarefa
+        self._open_task_edit_dialog(new_task, None)
+
+    def _open_task_edit_dialog(self, task, tree_item):
+        """Abre diálogo de edição para uma tarefa."""
+        dialog = Toplevel(self.edit_window)
+        dialog.title(f"Editar Tarefa {task.id}")
+        dialog.geometry("400x350")
+        dialog.transient(self.edit_window)
+        dialog.grab_set()
+        
+        form = Frame(dialog, padx=20, pady=20)
+        form.pack(fill=tk.BOTH, expand=True)
+        
+        # Campos de edição
+        Label(form, text="ID:").grid(row=0, column=0, sticky=tk.W, pady=3)
+        id_entry = Entry(form)
+        id_entry.grid(row=0, column=1, sticky=tk.EW, pady=3)
+        id_entry.insert(0, str(task.id))
+        
+        Label(form, text="Chegada:").grid(row=1, column=0, sticky=tk.W, pady=3)
+        chegada_entry = Entry(form)
+        chegada_entry.grid(row=1, column=1, sticky=tk.EW, pady=3)
+        chegada_entry.insert(0, str(task.inicio))
+        
+        Label(form, text="Duração:").grid(row=2, column=0, sticky=tk.W, pady=3)
+        duracao_entry = Entry(form)
+        duracao_entry.grid(row=2, column=1, sticky=tk.EW, pady=3)
+        duracao_entry.insert(0, str(task.duracao))
+        
+        Label(form, text="Prioridade:").grid(row=3, column=0, sticky=tk.W, pady=3)
+        prio_entry = Entry(form)
+        prio_entry.grid(row=3, column=1, sticky=tk.EW, pady=3)
+        prio_entry.insert(0, str(task.prio_s))
+        
+        Label(form, text="I/O (ex: 2-1,4-2):").grid(row=4, column=0, sticky=tk.W, pady=3)
+        io_entry = Entry(form)
+        io_entry.grid(row=4, column=1, sticky=tk.EW, pady=3)
+        io_str = ",".join([f"{t}-{d}" for t, d in task.io_events]) if task.io_events else ""
+        io_entry.insert(0, io_str)
+        
+        Label(form, text="ML (ex: 1,3):").grid(row=5, column=0, sticky=tk.W, pady=3)
+        ml_entry = Entry(form)
+        ml_entry.grid(row=5, column=1, sticky=tk.EW, pady=3)
+        ml_str = ",".join([str(t) for t in task.ml_events]) if task.ml_events else ""
+        ml_entry.insert(0, ml_str)
+        
+        Label(form, text="MU (ex: 2,4):").grid(row=6, column=0, sticky=tk.W, pady=3)
+        mu_entry = Entry(form)
+        mu_entry.grid(row=6, column=1, sticky=tk.EW, pady=3)
+        mu_str = ",".join([str(t) for t in task.mu_events]) if task.mu_events else ""
+        mu_entry.insert(0, mu_str)
+        
+        form.columnconfigure(1, weight=1)
+        
+        def save_changes():
+            try:
+                task.id = id_entry.get()
+                task.inicio = int(chegada_entry.get())
+                task.duracao = int(duracao_entry.get())
+                task.prio_s = int(prio_entry.get())
+                
+                # Parse I/O events
+                io_text = io_entry.get().strip()
+                task.io_events = []
+                if io_text:
+                    for part in io_text.split(","):
+                        if "-" in part:
+                            t, d = part.split("-")
+                            task.io_events.append((int(t), int(d)))
+                
+                # Parse ML events
+                ml_text = ml_entry.get().strip()
+                task.ml_events = []
+                if ml_text:
+                    task.ml_events = [int(x) for x in ml_text.split(",")]
+                
+                # Parse MU events
+                mu_text = mu_entry.get().strip()
+                task.mu_events = []
+                if mu_text:
+                    task.mu_events = [int(x) for x in mu_text.split(",")]
+                
+                self._populate_tasks_tree()
+                dialog.destroy()
+            except ValueError as e:
+                messagebox.showerror("Erro", f"Valor inválido: {e}", parent=dialog)
+        
+        Button(form, text="💾 Salvar", command=save_changes, bg="#4CAF50", fg="white").grid(row=7, column=0, columnspan=2, pady=20)
+
+    def _remove_selected_task(self):
+        """Remove a tarefa selecionada da lista."""
+        selection = self.tasks_tree.selection()
+        if not selection:
+            messagebox.showwarning("Aviso", "Selecione uma tarefa para remover.", parent=self.edit_window)
+            return
+        
+        item = selection[0]
+        values = self.tasks_tree.item(item, "values")
+        task_id = values[0]
+        
+        # Remove da lista
+        self.loaded_tasks = [t for t in self.loaded_tasks if str(t.id) != str(task_id)]
+        self._populate_tasks_tree()
+
+    def _apply_edits(self):
+        """Aplica as edições e reinicia a simulação."""
+        try:
+            # Atualiza algoritmo e quantum
+            self.current_algo = self.edit_algo_var.get()
+            quantum_text = self.edit_quantum_entry.get().strip()
+            self.current_quantum = int(quantum_text) if quantum_text and quantum_text != "0" else None
+            
+            self.lbl_algo_name.config(text=f"Algoritmo: {self.current_algo}" + (f" (Q={self.current_quantum})" if self.current_quantum else ""))
+            
+            self.edit_window.destroy()
+            self.edit_window = None
+            
+            # Reinicia simulação com as tarefas editadas
+            self.reset_simulation()
+            
+        except ValueError as e:
+            messagebox.showerror("Erro", f"Valor inválido: {e}", parent=self.edit_window)
 
 
     def run_all(self):
@@ -273,11 +587,11 @@ class App(tk.Tk):
         self._save_canvas_as_svg(filepath, x0, y0, x1, y1)
 
 
-    def _save_canvas_as_svg(self, filepath, x0, y0, x1, y1):
+    def _save_canvas_as_svg(self, filepath, x0, y0, x1, y1, silent=False):
             import xml.etree.ElementTree as ET
 
-            width = x1 - x0
-            height = y1 - y0
+            width = x1 - x0 + 20  # margem extra
+            height = y1 - y0 + 60  # espaço para legenda
 
             svg = ET.Element(
                 "svg",
@@ -286,6 +600,9 @@ class App(tk.Tk):
                 version="1.1",
                 xmlns="http://www.w3.org/2000/svg"
             )
+            
+            # Fundo branco
+            ET.SubElement(svg, "rect", x="0", y="0", width=str(width), height=str(height), fill="white")
 
             # Exportar cada item do canvas
             for item in self.gantt_canvas.find_all():
@@ -337,6 +654,28 @@ class App(tk.Tk):
                         **{"font-size": "12"}
                     )
                     text_el.text = text_value
+            
+            # Adiciona legenda no SVG
+            legend_y = y1 - y0 + 25
+            
+            # Texto "Legenda:"
+            legend_text = ET.SubElement(svg, "text", x="50", y=str(legend_y + 10), fill="black", **{"font-size": "12", "font-weight": "bold"})
+            legend_text.text = "Legenda:"
+            
+            # EXEC (azul)
+            ET.SubElement(svg, "rect", x="120", y=str(legend_y), width="20", height="14", fill="#6495ED", stroke="black", **{"stroke-width": "1"})
+            exec_text = ET.SubElement(svg, "text", x="145", y=str(legend_y + 11), fill="black", **{"font-size": "10"})
+            exec_text.text = "Executando"
+            
+            # IO (cinza)
+            ET.SubElement(svg, "rect", x="220", y=str(legend_y), width="20", height="14", fill="#BFBFBF", stroke="black", **{"stroke-width": "1"})
+            io_text = ET.SubElement(svg, "text", x="245", y=str(legend_y + 11), fill="black", **{"font-size": "10"})
+            io_text.text = "I/O"
+            
+            # MUTEX (roxo)
+            ET.SubElement(svg, "rect", x="280", y=str(legend_y), width="20", height="14", fill="#9932CC", stroke="black", **{"stroke-width": "1"})
+            mutex_text = ET.SubElement(svg, "text", x="305", y=str(legend_y + 11), fill="black", **{"font-size": "10"})
+            mutex_text.text = "Mutex"
 
             # Salvar com indentação bonita
             import xml.dom.minidom as md
@@ -345,7 +684,8 @@ class App(tk.Tk):
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(pretty)
 
-            messagebox.showinfo("Sucesso", f"Gantt exportado como SVG em:\n{filepath}")
+            if not silent:
+                messagebox.showinfo("Sucesso", f"Gantt COMPLETO exportado como SVG em:\n{filepath}")
 
 
     def update_ui(self):
@@ -417,6 +757,11 @@ class App(tk.Tk):
                     fill_color = "#bfbfbf"          # cinza para I/O
                     outline_color = "black"
                     width_val = 1
+                
+                elif state == "MUTEX":
+                    fill_color = "#9932CC"          # roxo para aguardando mutex
+                    outline_color = "#4B0082"       # roxo escuro
+                    width_val = 2
 
                 elif state == "READY":
                     fill_color = ""                 # transparente
@@ -468,9 +813,9 @@ class App(tk.Tk):
         self.gantt_canvas.config(scrollregion=(0, 0, x_end + 50, eixo_y + 40))
 
     def export_gantt_ps(self):
-        """Exporta o gráfico de Gantt como arquivo PNG usando múltiplos métodos."""
+        """Exporta o gráfico de Gantt COMPLETO como PNG (independente do tamanho)."""
         print("\n" + "="*60)
-        print("💾 EXPORTANDO GRÁFICO DE GANTT (PNG)")
+        print("💾 EXPORTANDO GRÁFICO DE GANTT COMPLETO (PNG)")
         print("="*60)
         
         if not self.simulator:
@@ -492,15 +837,31 @@ class App(tk.Tk):
             
             print(f"📁 Salvando em: {filepath}")
             
-            # Atualiza a região de scroll para capturar todo o conteúdo
+            # Atualiza o canvas
             self.gantt_canvas.update_idletasks()
             
-            # Tenta Método 1: ImageGrab (captura de tela - Windows)
-            if self._try_imagegrab_export(filepath):
+            # Obtém bbox de TODO o conteúdo do canvas
+            bbox = self.gantt_canvas.bbox("all")
+            if not bbox:
+                messagebox.showerror("Erro", "Nada para exportar.")
                 return
             
-            # Tenta Método 2: PostScript + Ghostscript (PIL)
-            if self._try_ghostscript_export(filepath):
+            x0, y0, x1, y1 = bbox
+            width = x1 - x0 + 20  # margem extra
+            height = y1 - y0 + 20
+            
+            print(f"📐 Dimensões do gráfico: {width}x{height} pixels")
+            
+            # Tenta Método 1: Pillow com redraw offscreen
+            if self._try_pillow_redraw_export(filepath, width, height):
+                return
+            
+            # Tenta Método 2: PostScript + Ghostscript
+            if self._try_postscript_full_export(filepath, width, height):
+                return
+            
+            # Tenta Método 3: SVG temporário + conversão
+            if self._try_svg_to_png_export(filepath):
                 return
             
             # Se nenhum método funcionou
@@ -509,52 +870,155 @@ class App(tk.Tk):
             messagebox.showerror("Erro", 
                 "Não foi possível exportar o Gantt.\n\n"
                 "Métodos tentados:\n"
-                "1. ImageGrab (captura de tela)\n"
-                "2. Ghostscript + PIL\n\n"
+                "1. Pillow (desenho direto)\n"
+                "2. PostScript + Ghostscript\n"
+                "3. SVG → PNG\n\n"
                 "Instale Pillow: pip install pillow")
         
         except Exception as e:
             print(f"❌ Erro inesperado: {e}")
+            import traceback
+            traceback.print_exc()
             print("="*60 + "\n")
             messagebox.showerror("Erro", f"Erro ao exportar Gantt:\n{e}")
     
-    def _try_imagegrab_export(self, filepath):
-        """Método 1: Usa PIL ImageGrab para capturar o canvas (Windows)."""
+    def _try_pillow_redraw_export(self, filepath, width, height):
+        """Método 1: Redesenha o Gantt diretamente em uma imagem PIL."""
         try:
-            from PIL import ImageGrab
+            from PIL import Image, ImageDraw, ImageFont
             
-            print("🔄 Tentando método 1: ImageGrab (captura de tela)...")
+            print("🔄 Tentando método 1: Pillow (desenho direto)...")
             
-            # Força atualização visual
-            self.gantt_canvas.update()
+            # Cria imagem com fundo branco
+            img = Image.new('RGB', (width, height), 'white')
+            draw = ImageDraw.Draw(img)
             
-            # Obtém as coordenadas do canvas na tela
-            x = self.gantt_canvas.winfo_rootx()
-            y = self.gantt_canvas.winfo_rooty()
-            x1 = x + self.gantt_canvas.winfo_width()
-            y1 = y + self.gantt_canvas.winfo_height()
+            # Tenta carregar fonte, senão usa default
+            try:
+                font = ImageFont.truetype("arial.ttf", 12)
+                font_small = ImageFont.truetype("arial.ttf", 9)
+            except:
+                font = ImageFont.load_default()
+                font_small = font
             
-            # Captura a região do canvas
-            img = ImageGrab.grab(bbox=(x, y, x1, y1))
+            # Obtém dados necessários
+            if not self.simulator or not self.simulator.all_tasks:
+                return False
+            
+            task_ids = sorted([t.id for t in self.simulator.all_tasks], reverse=True)
+            task_y_positions = {task_id: i * 40 + 30 for i, task_id in enumerate(task_ids)}
+            
+            block_width = 20
+            left_margin = 50
+            
+            # Desenha labels das tarefas
+            for task_id, y in task_y_positions.items():
+                draw.text((10, y - 6), f"T{task_id}", fill='black', font=font)
+            
+            # Desenha os blocos
+            gantt_data = getattr(self.simulator, "gantt_data", []) or []
+            max_time = 0
+            
+            for entry in gantt_data:
+                if len(entry) == 4:
+                    time, task_id, rgb_color, state = entry
+                else:
+                    time, task_id, rgb_color = entry
+                    state = "EXEC"
+                
+                if time > max_time:
+                    max_time = time
+                
+                if task_id != "IDLE" and task_id in task_y_positions:
+                    y_pos = task_y_positions[task_id]
+                    x_start = left_margin + time * block_width
+                    
+                    # Converte rgb_color para tupla (pode vir como lista)
+                    rgb_tuple = tuple(rgb_color) if isinstance(rgb_color, (list, tuple)) else rgb_color
+                    
+                    # Define cores
+                    if state == "EXEC":
+                        fill_color = rgb_tuple
+                        outline_color = (0, 0, 0)
+                    elif state == "IO":
+                        fill_color = (191, 191, 191)
+                        outline_color = (0, 0, 0)
+                    elif state == "MUTEX":
+                        fill_color = (153, 50, 204)
+                        outline_color = (75, 0, 130)
+                    elif state == "READY":
+                        fill_color = (255, 255, 255)
+                        outline_color = (0, 0, 0)
+                    else:
+                        fill_color = rgb_tuple
+                        outline_color = (0, 0, 0)
+                    
+                    # Desenha retângulo
+                    draw.rectangle(
+                        [x_start, y_pos - 15, x_start + block_width, y_pos + 15],
+                        fill=fill_color,
+                        outline=outline_color,
+                        width=1
+                    )
+            
+            # Desenha eixo do tempo
+            total_time = max_time + 1
+            x_end = left_margin + total_time * block_width
+            max_y = max(task_y_positions.values()) if task_y_positions else 0
+            eixo_y = max_y + 40
+            
+            draw.line([(left_margin, eixo_y), (x_end, eixo_y)], fill='black', width=2)
+            
+            # Marcadores de tempo
+            for t in range(1, total_time + 1):
+                x_block_start = left_margin + (t - 1) * block_width
+                x_block_end = x_block_start + block_width
+                x_center = x_block_start + block_width // 2
+                
+                draw.line([(x_block_start, eixo_y - 6), (x_block_start, eixo_y + 6)], fill='black')
+                draw.line([(x_block_end, eixo_y - 6), (x_block_end, eixo_y + 6)], fill='black')
+                draw.text((x_center - 4, eixo_y + 8), str(t), fill='black', font=font_small)
+            
+            # Adiciona legenda
+            legend_y = eixo_y + 40
+            draw.text((left_margin, legend_y), "Legenda:", fill='black', font=font)
+            
+            # EXEC
+            draw.rectangle([left_margin + 70, legend_y - 2, left_margin + 90, legend_y + 12], fill=(100, 149, 237), outline='black')
+            draw.text((left_margin + 95, legend_y), "Executando", fill='black', font=font_small)
+            
+            # IO
+            draw.rectangle([left_margin + 170, legend_y - 2, left_margin + 190, legend_y + 12], fill=(191, 191, 191), outline='black')
+            draw.text((left_margin + 195, legend_y), "I/O", fill='black', font=font_small)
+            
+            # MUTEX
+            draw.rectangle([left_margin + 230, legend_y - 2, left_margin + 250, legend_y + 12], fill=(153, 50, 204), outline='black')
+            draw.text((left_margin + 255, legend_y), "Mutex", fill='black', font=font_small)
+            
+            # Salva
             img.save(filepath, 'PNG')
             
-            print(f"✅ Gantt exportado com sucesso! (Método: ImageGrab)")
+            print(f"✅ Gantt COMPLETO exportado com sucesso! (Método: Pillow)")
+            print(f"   Tamanho: {width}x{height} pixels")
             print("="*60 + "\n")
             
             messagebox.showinfo("Sucesso", 
-                f"Gantt exportado para:\n{filepath}\n\n"
-                f"Método: Captura de tela (ImageGrab)")
+                f"Gantt COMPLETO exportado para:\n{filepath}\n\n"
+                f"Tamanho: {width}x{height} pixels\n"
+                f"Método: Pillow (desenho direto)")
             return True
         
         except ImportError:
-            print("⚠️  ImageGrab não disponível (requer Pillow)")
+            print("⚠️  Pillow não disponível")
             return False
         except Exception as e:
-            print(f"⚠️  ImageGrab falhou: {e}")
+            print(f"⚠️  Pillow falhou: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
-    def _try_ghostscript_export(self, filepath):
-        """Método 2: Usa PostScript + Ghostscript via PIL."""
+    def _try_postscript_full_export(self, filepath, width, height):
+        """Método 2: Usa PostScript completo + Ghostscript."""
         try:
             from PIL import Image
             import tempfile
@@ -562,21 +1026,32 @@ class App(tk.Tk):
             
             print("🔄 Tentando método 2: PostScript + Ghostscript...")
             
-            # Gera PostScript temporário
+            # Gera PostScript com dimensões completas
             with tempfile.NamedTemporaryFile(mode='w', suffix='.ps', delete=False) as tmp:
                 ps_file = tmp.name
-                self.gantt_canvas.postscript(file=ps_file, colormode='color')
+                # Exporta TODO o canvas (bbox completo)
+                bbox = self.gantt_canvas.bbox("all")
+                if bbox:
+                    x0, y0, x1, y1 = bbox
+                    self.gantt_canvas.postscript(
+                        file=ps_file, 
+                        colormode='color',
+                        x=x0, y=y0,
+                        width=x1-x0, height=y1-y0
+                    )
+                else:
+                    self.gantt_canvas.postscript(file=ps_file, colormode='color')
             
-            # Converte PS para PNG usando PIL (requer Ghostscript)
+            # Converte PS para PNG
             img = Image.open(ps_file)
             img.save(filepath, 'PNG')
-            os.unlink(ps_file)  # Remove arquivo temporário
+            os.unlink(ps_file)
             
-            print(f"✅ Gantt exportado com sucesso! (Método: Ghostscript)")
+            print(f"✅ Gantt COMPLETO exportado com sucesso! (Método: Ghostscript)")
             print("="*60 + "\n")
             
             messagebox.showinfo("Sucesso", 
-                f"Gantt exportado para:\n{filepath}\n\n"
+                f"Gantt COMPLETO exportado para:\n{filepath}\n\n"
                 f"Método: PostScript + Ghostscript")
             return True
         
@@ -585,24 +1060,50 @@ class App(tk.Tk):
             return False
         except Exception as e:
             print(f"⚠️  Ghostscript falhou: {e}")
-            print("   Nota: Este método requer Ghostscript instalado")
-            print("   Instale: winget install --id Artifex.Ghostscript -e")
             return False
-            print("="*60 + "\n")
-            messagebox.showerror("Erro", 
-                "PIL/Pillow não está instalado.\n\n"
-                "Para exportar como PNG, instale:\n"
-                "pip install pillow")
-        
+    
+    def _try_svg_to_png_export(self, filepath):
+        """Método 3: Exporta SVG e converte para PNG."""
+        try:
+            import tempfile
+            import os
+            
+            print("🔄 Tentando método 3: SVG → PNG...")
+            
+            # Tenta usar cairosvg ou svglib
+            try:
+                from cairosvg import svg2png
+                
+                # Gera SVG temporário
+                bbox = self.gantt_canvas.bbox("all")
+                if not bbox:
+                    return False
+                
+                x0, y0, x1, y1 = bbox
+                
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.svg', delete=False, encoding='utf-8') as tmp:
+                    svg_file = tmp.name
+                    self._save_canvas_as_svg(svg_file, x0, y0, x1, y1, silent=True)
+                
+                # Converte SVG para PNG
+                svg2png(url=svg_file, write_to=filepath)
+                os.unlink(svg_file)
+                
+                print(f"✅ Gantt COMPLETO exportado com sucesso! (Método: CairoSVG)")
+                print("="*60 + "\n")
+                
+                messagebox.showinfo("Sucesso", 
+                    f"Gantt COMPLETO exportado para:\n{filepath}\n\n"
+                    f"Método: SVG → PNG (CairoSVG)")
+                return True
+                
+            except ImportError:
+                print("⚠️  CairoSVG não disponível")
+                return False
+                
         except Exception as e:
-            print(f"❌ Erro ao exportar Gantt: {e}")
-            print("   Nota: PIL requer Ghostscript instalado no sistema")
-            print("   Instale: winget install --id Artifex.Ghostscript -e")
-            print("="*60 + "\n")
-            messagebox.showerror("Erro", 
-                f"Erro ao exportar Gantt:\n{e}\n\n"
-                f"PIL/Pillow requer Ghostscript para converter PS→PNG.\n"
-                f"Instale com: winget install --id Artifex.Ghostscript -e")
+            print(f"⚠️  SVG→PNG falhou: {e}")
+            return False
 
     # Função para criar tarefas novas
 
@@ -829,6 +1330,17 @@ class App(tk.Tk):
         Label(summary_frame, text=f"Tempo Médio de Resposta: {stats['avg_response']:.2f}", 
               font=("Arial", 11), bg="#E8F4F8").pack(anchor=tk.W, padx=20)
         
+        # Estatísticas de Mutex (se houver)
+        if stats.get('mutex_info') and stats['mutex_info']['total_waits'] > 0:
+            Label(summary_frame, text="", bg="#E8F4F8").pack()  # Espaçamento
+            Label(summary_frame, text="🔒 Estatísticas de Mutex:", font=("Arial", 12, "bold"), bg="#E8F4F8").pack(anchor=tk.W, padx=10)
+            Label(summary_frame, text=f"Total de Bloqueios por Mutex: {stats['mutex_info']['total_waits']}", 
+                  font=("Arial", 11), bg="#E8F4F8").pack(anchor=tk.W, padx=20)
+            Label(summary_frame, text=f"Tempo Total de Espera por Mutex: {stats['mutex_info']['total_wait_time']}", 
+                  font=("Arial", 11), bg="#E8F4F8").pack(anchor=tk.W, padx=20)
+            Label(summary_frame, text=f"Tempo Médio de Espera por Mutex: {stats['avg_mutex_wait']:.2f}", 
+                  font=("Arial", 11), bg="#E8F4F8").pack(anchor=tk.W, padx=20)
+        
         # Frame inferior com tabela de tarefas
         table_frame = Frame(stats_window, padx=10, pady=10)
         table_frame.pack(fill=tk.BOTH, expand=True)
@@ -847,15 +1359,27 @@ class App(tk.Tk):
         scrollbar.config(command=stats_text.yview)
         
         # Cabeçalho da tabela
-        header = f"{'ID':<6} {'Chegada':<10} {'Término':<10} {'Turnaround':<12} {'Espera':<10} {'Resposta':<10} {'Ativações':<10}\n"
-        stats_text.insert(tk.END, header)
-        stats_text.insert(tk.END, "=" * 85 + "\n")
+        has_mutex_data = stats.get('mutex_info') and stats['mutex_info']['total_waits'] > 0
+        if has_mutex_data:
+            header = f"{'ID':<6} {'Chegada':<10} {'Término':<10} {'Turnaround':<12} {'Espera':<10} {'Resposta':<10} {'Ativações':<10} {'MutexWait':<10} {'MutexCnt':<8}\n"
+            stats_text.insert(tk.END, header)
+            stats_text.insert(tk.END, "=" * 100 + "\n")
+        else:
+            header = f"{'ID':<6} {'Chegada':<10} {'Término':<10} {'Turnaround':<12} {'Espera':<10} {'Resposta':<10} {'Ativações':<10}\n"
+            stats_text.insert(tk.END, header)
+            stats_text.insert(tk.END, "=" * 85 + "\n")
         
         # Dados das tarefas
         for task_stat in sorted(stats['tasks'], key=lambda x: x['id']):
-            line = f"{task_stat['id']:<6} {task_stat['arrival']:<10} {task_stat['completion']:<10} " \
-                   f"{task_stat['turnaround_time']:<12} {task_stat['waiting_time']:<10} " \
-                   f"{task_stat['response_time']:<10} {task_stat['activations']:<10}\n"
+            if has_mutex_data:
+                line = f"{task_stat['id']:<6} {task_stat['arrival']:<10} {task_stat['completion']:<10} " \
+                       f"{task_stat['turnaround_time']:<12} {task_stat['waiting_time']:<10} " \
+                       f"{task_stat['response_time']:<10} {task_stat['activations']:<10} " \
+                       f"{task_stat.get('mutex_wait_time', 0):<10} {task_stat.get('mutex_wait_count', 0):<8}\n"
+            else:
+                line = f"{task_stat['id']:<6} {task_stat['arrival']:<10} {task_stat['completion']:<10} " \
+                       f"{task_stat['turnaround_time']:<12} {task_stat['waiting_time']:<10} " \
+                       f"{task_stat['response_time']:<10} {task_stat['activations']:<10}\n"
             stats_text.insert(tk.END, line)
         
         stats_text.config(state=tk.DISABLED)
@@ -886,14 +1410,31 @@ class App(tk.Tk):
                 f.write(f"  Tempo Médio de Espera: {stats['avg_waiting']:.2f}\n")
                 f.write(f"  Tempo Médio de Resposta: {stats['avg_response']:.2f}\n\n")
                 
-                f.write("=" * 80 + "\n")
-                f.write(f"{'ID':<6} {'Chegada':<10} {'Término':<10} {'Turnaround':<12} {'Espera':<10} {'Resposta':<10} {'Ativações':<10}\n")
-                f.write("=" * 80 + "\n")
+                # Estatísticas de Mutex (se houver)
+                has_mutex_data = stats.get('mutex_info') and stats['mutex_info']['total_waits'] > 0
+                if has_mutex_data:
+                    f.write("ESTATÍSTICAS DE MUTEX:\n")
+                    f.write(f"  Total de Bloqueios por Mutex: {stats['mutex_info']['total_waits']}\n")
+                    f.write(f"  Tempo Total de Espera por Mutex: {stats['mutex_info']['total_wait_time']}\n")
+                    f.write(f"  Tempo Médio de Espera por Mutex: {stats['avg_mutex_wait']:.2f}\n\n")
+                
+                f.write("=" * 100 + "\n")
+                if has_mutex_data:
+                    f.write(f"{'ID':<6} {'Chegada':<10} {'Término':<10} {'Turnaround':<12} {'Espera':<10} {'Resposta':<10} {'Ativações':<10} {'MutexWait':<10} {'MutexCnt':<8}\n")
+                else:
+                    f.write(f"{'ID':<6} {'Chegada':<10} {'Término':<10} {'Turnaround':<12} {'Espera':<10} {'Resposta':<10} {'Ativações':<10}\n")
+                f.write("=" * 100 + "\n")
                 
                 for task_stat in sorted(stats['tasks'], key=lambda x: x['id']):
-                    f.write(f"{task_stat['id']:<6} {task_stat['arrival']:<10} {task_stat['completion']:<10} "
-                           f"{task_stat['turnaround_time']:<12} {task_stat['waiting_time']:<10} "
-                           f"{task_stat['response_time']:<10} {task_stat['activations']:<10}\n")
+                    if has_mutex_data:
+                        f.write(f"{task_stat['id']:<6} {task_stat['arrival']:<10} {task_stat['completion']:<10} "
+                               f"{task_stat['turnaround_time']:<12} {task_stat['waiting_time']:<10} "
+                               f"{task_stat['response_time']:<10} {task_stat['activations']:<10} "
+                               f"{task_stat.get('mutex_wait_time', 0):<10} {task_stat.get('mutex_wait_count', 0):<8}\n")
+                    else:
+                        f.write(f"{task_stat['id']:<6} {task_stat['arrival']:<10} {task_stat['completion']:<10} "
+                               f"{task_stat['turnaround_time']:<12} {task_stat['waiting_time']:<10} "
+                               f"{task_stat['response_time']:<10} {task_stat['activations']:<10}\n")
             
             messagebox.showinfo("Sucesso", f"Estatísticas exportadas para '{filepath}'")
         except Exception as e:
@@ -1008,11 +1549,18 @@ class App(tk.Tk):
                         algo_name, quantum_val, tasks = load_simulation_config(filepath)
                         scheduler_class = SCHEDULER_FACTORY.get(algo_name)
                         if scheduler_class:
+                            # Salva configuração para edição posterior
+                            self.current_algo = algo_name
+                            self.current_quantum = quantum_val
+                            self.loaded_tasks = tasks
+                            
                             scheduler = scheduler_class(quantum=quantum_val) if quantum_val else scheduler_class()
                             self.simulator = Simulator(scheduler, tasks)
                             self.lbl_algo_name.config(text=f"Algoritmo: {algo_name}" + (f" (Q={quantum_val})" if quantum_val else ""))
                             self.btn_step.config(state=tk.NORMAL)
                             self.btn_run.config(state=tk.NORMAL)
+                            self.btn_edit.config(state=tk.NORMAL)
+                            self.btn_reset.config(state=tk.NORMAL)
                             self.btn_stats.config(state=tk.DISABLED)
                             self.btn_export_gantt.config(state=tk.DISABLED)
                             self.update_tasks_table(tasks)

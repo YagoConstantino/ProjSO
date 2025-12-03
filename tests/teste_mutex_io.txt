@@ -1,0 +1,9 @@
+PRIOP;5
+#id;cor_id;ingresso;duracao;prioridade;eventos
+# Teste combinando I/O e Mutex
+# t01: lock no tempo 1, I/O no tempo 2 por 1 unidade, unlock no tempo 4
+# t02: lock no tempo 1 (bloqueia), unlock no tempo 3
+# t03: I/O no tempo 2 por 2 unidades
+t01;0;0;6;3;ML:1;IO:2-1;MU:4
+t02;1;1;4;2;ML:1;MU:3
+t03;2;2;3;1;IO:2-2

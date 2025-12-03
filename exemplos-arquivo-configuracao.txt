@@ -1,0 +1,28 @@
+algoritmo_escalonamento;quantum
+id;cor;ingresso;duracao;prioridade;lista_eventos
+
+
+Exemplos:
+
+FSCS;2
+t01;0;5;2;IO:2-1;IO:3-2
+t02;0;4;3;IO:3-1
+t03;3;5;5;
+t04;5;6;9;IO:2-1
+t05;7;4;6;IO:2-1
+
+
+PRIOP;5
+t01;0;5;2;IO:2-1;IO:3-2
+t02;0;4;3;IO:3-1
+t03;3;5;5;ML:1;MU:3
+t04;5;6;9;ML:1;IO:2-1;MU:3
+t05;7;4;6;ML:1;IO:2-1;MU:3
+
+
+Legenda:
+IO: operação de I/O em algum dispoisivo externo
+ML: mutex lock
+MU: mutex unlock
+- Os instantes de tempo indicados nos eventos são sempre relativos ao início da tarefa
+- No caso das operações de I/O, o primeiro numero indica o instante de tempo no qual operação foi iniciada e o segundo numero indica quando tempo a operação demorou para finalizar

@@ -6,6 +6,14 @@ Define a estrutura TCB e a fila de tarefas TCBQueue.
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
+# Estados da tarefa
+STATE_NEW = 1           # Novo - tarefa criada mas não chegou
+STATE_READY = 2         # Pronto - aguardando na fila de prontos
+STATE_RUNNING = 3       # Executando - usando a CPU
+STATE_BLOCKED_IO = 4    # Bloqueado - aguardando I/O
+STATE_TERMINATED = 5    # Terminado - execução completa
+STATE_BLOCKED_MUTEX = 6 # Bloqueado - aguardando mutex
+
 @dataclass
 class TCB:
     """
@@ -14,7 +22,7 @@ class TCB:
     Atributos:
         id (int): Identificador único da tarefa
         RGB (List[int]): Cor RGB [R, G, B] para visualização no Gantt
-        state (int): Estado da tarefa (1=Novo, 2=Pronto, 3=Executando, 4=Bloqueado, 5=Terminado)
+        state (int): Estado da tarefa (1=Novo, 2=Pronto, 3=Executando, 4=Bloqueado I/O, 5=Terminado, 6=Bloqueado Mutex)
         prio_s (int): Prioridade estática da tarefa (maior = mais prioritária)
         prio_d (int): Prioridade dinâmica (pode mudar durante execução)
         inicio (int): Tempo de chegada/ingresso da tarefa no sistema
@@ -23,6 +31,14 @@ class TCB:
         io_events (List[Tuple[int, int]]): Lista de eventos I/O [(tempo_relativo, duracao), ...]
         io_blocked_until (int): Timestamp até quando a tarefa fica bloqueada em I/O
         tempo_exec_acumulado (int): Tempo total já executado pela tarefa
+        
+        # Eventos de Mutex (Entrega B)
+        ml_events (List[int]): Lista de tempos relativos para tentar mutex lock
+        mu_events (List[int]): Lista de tempos relativos para fazer mutex unlock
+        mutex_blocked_until (int): Timestamp até quando a tarefa fica bloqueada por mutex (0 = indefinido)
+        mutex_wait_time (int): Tempo total bloqueado aguardando mutex
+        mutex_wait_count (int): Número de vezes que a tarefa esperou pelo mutex
+        has_mutex (bool): Se a tarefa possui o mutex atualmente
         
         # Estatísticas de execução
         ativacoes (int): Número de vezes que a tarefa foi colocada em execução
@@ -47,6 +63,14 @@ class TCB:
     io_events: List[Tuple[int, int]] = field(default_factory=list)
     io_blocked_until: int = 0
     tempo_exec_acumulado: int = 0
+    
+    # Campos para Mutex (Entrega B)
+    ml_events: List[int] = field(default_factory=list)  # Tempos relativos para mutex lock
+    mu_events: List[int] = field(default_factory=list)  # Tempos relativos para mutex unlock
+    mutex_blocked_until: int = 0   # Timestamp de quando será desbloqueado (0 = indefinido, aguarda unlock de outra tarefa)
+    mutex_wait_time: int = 0       # Tempo total bloqueado por mutex
+    mutex_wait_count: int = 0      # Vezes que esperou pelo mutex
+    has_mutex: bool = False        # Se possui o mutex
     
     # Estatísticas
     ativacoes: int = 0
@@ -75,6 +99,35 @@ class TCB:
                 # Remove o evento para não disparar novamente
                 self.io_events.pop(i)
                 return (tempo_inicio, duracao)
+        return None
+    
+    def check_mutex_lock_event(self) -> bool:
+        """
+        Verifica se há um evento de mutex lock que deve ser disparado agora.
+        Remove o evento da lista após disparar para não repetir.
+        
+        Returns:
+            True se deve tentar adquirir o mutex, False caso contrário
+        """
+        for i, tempo in enumerate(self.ml_events):
+            if tempo == self.tempo_exec_acumulado:
+                self.ml_events.pop(i)
+                return True
+        return False
+    
+    def check_mutex_unlock_event(self) -> bool:
+        """
+        Verifica se há um evento de mutex unlock que deve ser disparado agora.
+        Remove o evento da lista após disparar para não repetir.
+        
+        Returns:
+            True se deve liberar o mutex, False caso contrário
+        """
+        for i, tempo in enumerate(self.mu_events):
+            if tempo == self.tempo_exec_acumulado:
+                self.mu_events.pop(i)
+                return True
+        return False
         return None
 
 class TCBQueue:

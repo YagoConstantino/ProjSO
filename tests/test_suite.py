@@ -205,6 +205,87 @@ def test_io_blocking():
         print(f"❌ FALHOU: {e}")
         return False
 
+
+def test_mutex_basic():
+    """Testa funcionalidade básica de mutex"""
+    print("\n🧪 Teste 8: Mutex Básico")
+    try:
+        test_file = os.path.join(TEST_PATH, "teste_mutex_basico.txt")
+        algo, quantum, tasks = load_simulation_config(test_file)
+        
+        # Verifica se eventos de mutex foram parseados
+        tasks_with_ml = [t for t in tasks if len(t.ml_events) > 0]
+        tasks_with_mu = [t for t in tasks if len(t.mu_events) > 0]
+        
+        assert len(tasks_with_ml) > 0, "Nenhuma tarefa com ML encontrada"
+        assert len(tasks_with_mu) > 0, "Nenhuma tarefa com MU encontrada"
+        
+        print(f"   {len(tasks_with_ml)} tarefas com ML, {len(tasks_with_mu)} com MU")
+        print("✅ Mutex Básico OK")
+        return True
+    except Exception as e:
+        print(f"❌ FALHOU: {e}")
+        return False
+
+
+def test_mutex_contention():
+    """Testa contenção de mutex entre tarefas"""
+    print("\n🧪 Teste 9: Contenção de Mutex")
+    try:
+        test_file = os.path.join(TEST_PATH, "teste_mutex_basico.txt")
+        algo, quantum, tasks = load_simulation_config(test_file)
+        
+        scheduler = RoundRobinScheduler(quantum=quantum)
+        simulator = Simulator(scheduler, tasks)
+        
+        simulator.run_full()
+        
+        assert simulator.is_finished(), "Simulação não terminou"
+        
+        stats = simulator.get_statistics()
+        
+        # Verifica se houve espera por mutex
+        total_mutex_waits = stats['mutex_info']['total_waits']
+        total_mutex_time = stats['mutex_info']['total_wait_time']
+        
+        print(f"   Total de esperas por mutex: {total_mutex_waits}")
+        print(f"   Tempo total de espera: {total_mutex_time}")
+        
+        # Com o teste atual, deve haver pelo menos 1 espera por mutex
+        assert total_mutex_waits >= 1, f"Esperava contenção de mutex, mas houve {total_mutex_waits} esperas"
+        
+        print("✅ Contenção de Mutex OK")
+        return True
+    except Exception as e:
+        print(f"❌ FALHOU: {e}")
+        return False
+
+
+def test_mutex_io_combined():
+    """Testa combinação de mutex e I/O"""
+    print("\n🧪 Teste 10: Mutex + I/O Combinados")
+    try:
+        test_file = os.path.join(TEST_PATH, "teste_mutex_io.txt")
+        algo, quantum, tasks = load_simulation_config(test_file)
+        
+        # Verifica parsing combinado
+        tasks_with_both = [t for t in tasks if len(t.io_events) > 0 and len(t.ml_events) > 0]
+        assert len(tasks_with_both) > 0, "Nenhuma tarefa com ML+IO encontrada"
+        
+        scheduler = PriorityScheduler(quantum)
+        simulator = Simulator(scheduler, tasks)
+        
+        simulator.run_full()
+        
+        assert simulator.is_finished(), "Simulação não terminou"
+        
+        print("✅ Mutex + I/O OK")
+        return True
+    except Exception as e:
+        print(f"❌ FALHOU: {e}")
+        return False
+
+
 def run_all_tests():
     """Executa todos os testes"""
     print("="*60)
@@ -218,7 +299,10 @@ def run_all_tests():
         test_fifo_simulation,
         test_statistics,
         test_srtf_preemption,
-        test_io_blocking
+        test_io_blocking,
+        test_mutex_basic,
+        test_mutex_contention,
+        test_mutex_io_combined
     ]
     
     results = []
