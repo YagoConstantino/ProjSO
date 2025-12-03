@@ -4,7 +4,7 @@ Gerencia a execução das tarefas, eventos de I/O, sincronização com mutex e c
 """
 
 from tasks import TCB, TCBQueue, STATE_NEW, STATE_READY, STATE_RUNNING, STATE_BLOCKED_IO, STATE_TERMINATED, STATE_BLOCKED_MUTEX
-from scheduler import Scheduler, RoundRobinScheduler
+from scheduler import Scheduler, RoundRobinScheduler, PRIOPEnvScheduler
 from typing import List, Optional
 
 
@@ -120,8 +120,64 @@ class Simulator:
         # Mutex global para sincronização (Entrega B)
         self.mutex = Mutex()
         
-        self.gantt_data = []  # Dados para o gráfico de Gantt: [(time, task_id, color, state), ...]
-    
+        self.gantt_data = []  # Dados para o gráfico de Gantt
+        
+        # Histórico para funcionalidade de voltar
+        self.history = []
+        self.max_history = 1000
+
+    def _save_state(self):
+        """
+        Salva o estado atual da simulação no histórico.
+        Permite retroceder com step_back().
+        """
+        state = {
+            'time': self.time,
+            'tasks_state': {},
+            'scheduler_state': {}
+        }
+        
+        # Salva estado do scheduler (quantum para RR/PRIOPEnv)
+        if isinstance(self.scheduler, (RoundRobinScheduler, PRIOPEnvScheduler)):
+            state['scheduler_state'] = {
+                'time_slice_remaining': self.scheduler.time_slice_remaining
+            }
+        
+        # Salva estado de cada tarefa
+        for task in self.all_tasks:
+            state['tasks_state'][task.id] = {
+                'state': task.state,
+                'tempo_restante': task.tempo_restante,
+                'tempo_exec_acumulado': task.tempo_exec_acumulado,
+                'io_blocked_until': task.io_blocked_until,
+                'io_events': list(task.io_events or []),
+                'ml_events': list(task.ml_events or []),
+                'mu_events': list(task.mu_events or []),
+                'ativacoes': task.ativacoes,
+                'inicioExec': task.inicioExec,
+                'fimExec': task.fimExec,
+                'somaExec': task.somaExec,
+                'has_mutex': task.has_mutex,
+                'mutex_wait_time': task.mutex_wait_time,
+                'mutex_wait_count': task.mutex_wait_count,
+                'fim': task.fim,
+                'prio_d': task.prio_d  # NOVO: Salva prioridade dinâmica
+            }
+        
+        # Salva estado do mutex
+        state['mutex'] = {
+            'locked': self.mutex.locked,
+            'owner_id': self.mutex.get_owner_id(),
+            'waiting_ids': [t.id for t in self.mutex.waiting_queue]
+        }
+        
+        # Adiciona ao histórico
+        self.history.append(state)
+        
+        # Limita tamanho do histórico
+        if len(self.history) > self.max_history:
+            self.history.pop(0)
+
     # Alias para compatibilidade com código existente
     @property
     def blocked_queue(self):
@@ -130,13 +186,19 @@ class Simulator:
 
     def _check_for_new_arrivals(self):
         """
-        Verifica se há tarefas chegando no tempo atual.
-        Move tarefas novas (state=1) para a fila de prontos (state=2).
+        Verifica se há novas tarefas chegando no tempo atual.
+        Move tarefas de NEW (estado 1) para READY (estado 2).
+        NOVO: Aplica envelhecimento nas tarefas prontas quando nova tarefa chega.
         """
         for task in self.all_tasks:
-            if task.inicio == self.time and task.state == STATE_NEW:
+            if task.state == STATE_NEW and task.inicio == self.time:
                 task.state = STATE_READY
+                task.prio_d = task.prio_s  # Reseta prioridade dinâmica ao chegar
                 self.ready_queue.push_back(task)
+                
+                # NOVO: Aplica envelhecimento nas outras tarefas prontas
+                if isinstance(self.scheduler, PRIOPEnvScheduler):
+                    self.scheduler.age_tasks(self.ready_queue, exclude_task=task)
     
     def _check_io_unblock(self):
         """
@@ -254,20 +316,15 @@ class Simulator:
         if self.is_finished():
             return
 
+        self._save_state()
+
         # 1. Processa chegada de novas tarefas
         self._check_for_new_arrivals()
-        
-         # Registrar tarefas prontas (state = 2)
-        for t in self.ready_queue:
-            self.gantt_data.append((self.time, t.id, t.RGB, "READY"))
         # 2. Desbloqueia tarefas que completaram I/O
         self._check_io_unblock()
-        # Registrar novamente tarefas prontas após desbloquear I/O
-        for t in self.ready_queue:
-            self.gantt_data.append((self.time, t.id, t.RGB, "READY"))
         
-        # 3. Verifica preempção por quantum esgotado (Round-Robin)
-        if isinstance(self.scheduler, RoundRobinScheduler):
+        # Verifica preempção por quantum esgotado (Round-Robin ou PRIOPEnv)
+        if isinstance(self.scheduler, (RoundRobinScheduler, PRIOPEnvScheduler)):
             if self.current_task and self.scheduler.time_slice_remaining <= 0 and self.current_task.tempo_restante > 0:
                 # Quantum esgotado: move tarefa atual para o fim da fila
                 self.ready_queue.remove(self.current_task)
@@ -277,6 +334,11 @@ class Simulator:
                 self.current_task.fimExec = self.time
                 self.current_task.somaExec += (self.time - self.current_task.inicioExec)
                 self.current_task = None
+        
+        # Registrar tarefas prontas (state = 2)
+        for task in self.all_tasks:
+            if task.state == STATE_READY:
+                self.gantt_data.append((self.time, task.id, task.RGB, "READY"))
         
         # 4. Seleciona a próxima tarefa a executar
         next_task = self.scheduler.select_next_task(self.ready_queue, self.current_task, self.time)
@@ -336,6 +398,10 @@ class Simulator:
                         self.current_task.fim = self.time + 1  # Marca o tempo de término
                         self.current_task.fimExec = self.time + 1
                         self.current_task.somaExec += ((self.time + 1) - self.current_task.inicioExec)
+                        
+                        # NOVO: Aplica envelhecimento quando tarefa termina
+                        if isinstance(self.scheduler, PRIOPEnvScheduler):
+                            self.scheduler.age_tasks(self.ready_queue)
                         
                         # Se a tarefa ainda tinha o mutex, libera
                         if self.current_task.has_mutex:

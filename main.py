@@ -5,7 +5,7 @@ from tkinter import (
 )
 
 from config_loader import load_simulation_config
-from scheduler import FIFOScheduler, SRTFScheduler, PriorityScheduler, RoundRobinScheduler
+from scheduler import FIFOScheduler, SRTFScheduler, PriorityScheduler, RoundRobinScheduler, PRIOPEnvScheduler
 from simulador import Simulator
 import random
 import os
@@ -48,6 +48,7 @@ SCHEDULER_FACTORY = {
     "PRIO": PriorityScheduler,
     "PRIOP": PriorityScheduler,
     "RR": RoundRobinScheduler,
+    "PRIOPENV": PRIOPEnvScheduler,  # NOVO: Prioridade com envelhecimento
 }
 
 class App(tk.Tk):
@@ -181,7 +182,8 @@ class App(tk.Tk):
             return
         
         try:
-            algo_name, quantum, tasks = load_simulation_config(filepath)
+            # MODIFICADO: Agora retorna 4 valores (inclui alpha)
+            algo_name, quantum, alpha, tasks = load_simulation_config(filepath)
             scheduler_class = SCHEDULER_FACTORY.get(algo_name)
             if not scheduler_class:
                 messagebox.showerror("Erro", f"Algoritmo '{algo_name}' não suportado.")
@@ -191,13 +193,27 @@ class App(tk.Tk):
             # Salva configuração para edição posterior
             self.current_algo = algo_name
             self.current_quantum = quantum
+            self.current_alpha = alpha  # NOVO: Salva alpha
             self.loaded_tasks = tasks
 
-            # Instancia o escalonador com quantum (se aplicável)
-            scheduler = scheduler_class(quantum=quantum) if quantum else scheduler_class()
+            # Instancia o escalonador com parâmetros apropriados
+            if algo_name == "PRIOPENV":
+                # PRIOPEnv precisa de quantum e alpha
+                scheduler = scheduler_class(quantum=quantum or 1, alpha=alpha or 1)
+            elif quantum:
+                scheduler = scheduler_class(quantum=quantum)
+            else:
+                scheduler = scheduler_class()
+            
             self.simulator = Simulator(scheduler, tasks)
             
-            self.lbl_algo_name.config(text=f"Algoritmo: {algo_name}" + (f" (Q={quantum})" if quantum else ""))
+            # Atualiza label com informações do algoritmo
+            algo_info = f"Algoritmo: {algo_name}"
+            if quantum:
+                algo_info += f" (Q={quantum})"
+            if alpha:
+                algo_info += f" (α={alpha})"
+            self.lbl_algo_name.config(text=algo_info)
 
             self.btn_step.config(state=tk.NORMAL)
             self.btn_run.config(state=tk.NORMAL)
@@ -1585,15 +1601,23 @@ class App(tk.Tk):
                     
                     # Carrega automaticamente
                     try:
-                        algo_name, quantum_val, tasks = load_simulation_config(filepath)
+                        algo_name, quantum_val, alpha_val, tasks = load_simulation_config(filepath)
                         scheduler_class = SCHEDULER_FACTORY.get(algo_name)
                         if scheduler_class:
                             # Salva configuração para edição posterior
                             self.current_algo = algo_name
                             self.current_quantum = quantum_val
+                            self.current_alpha = alpha_val
                             self.loaded_tasks = tasks
                             
-                            scheduler = scheduler_class(quantum=quantum_val) if quantum_val else scheduler_class()
+                            # Instancia o escalonador com parâmetros apropriados
+                            if algo_name == "PRIOPENV":
+                                scheduler = scheduler_class(quantum=quantum_val or 1, alpha=alpha_val or 1)
+                            elif quantum_val:
+                                scheduler = scheduler_class(quantum=quantum_val)
+                            else:
+                                scheduler = scheduler_class()
+                            
                             self.simulator = Simulator(scheduler, tasks)
                             self.lbl_algo_name.config(text=f"Algoritmo: {algo_name}" + (f" (Q={quantum_val})" if quantum_val else ""))
                             self.btn_step.config(state=tk.NORMAL)

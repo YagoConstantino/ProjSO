@@ -55,7 +55,7 @@ class TCB:
     RGB: List[int]
     state: int = 1
     prio_s: int = 0
-    prio_d: int = 0
+    prio_d: int = 0  # Prioridade dinâmica (pode mudar com envelhecimento)
     inicio: int = 0
     duracao: int = 0
     
@@ -83,9 +83,21 @@ class TCB:
     next: Optional["TCB"] = field(default=None, repr=False)
 
     def __post_init__(self):
-        """Inicializa o tempo restante igual à duração total."""
+        """Inicializa o tempo restante igual à duração total e garante listas não-None."""
         self.tempo_restante = self.duracao
-    
+        
+        # Inicializa prio_d com prio_s se não foi definido
+        if self.prio_d == 0 and self.prio_s != 0:
+            self.prio_d = self.prio_s
+        
+        # Garante que listas NUNCA sejam None
+        if self.io_events is None:
+            self.io_events = []
+        if self.ml_events is None:
+            self.ml_events = []
+        if self.mu_events is None:
+            self.mu_events = []
+
     def check_io_event(self) -> Optional[Tuple[int, int]]:
         """
         Verifica se há um evento de I/O que deve ser disparado agora.

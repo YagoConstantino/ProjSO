@@ -1,0 +1,11 @@
+# Teste de cores hexadecimais
+
+FIFO;
+#id;cor_hex;ingresso;duracao;prioridade
+t1;FF0000;0;2;1
+t2;00FF00;0;2;1
+t3;0000FF;0;2;1
+t4;FFFF00;0;2;1
+t5;FF00FF;0;2;1
+t6;00FFFF;0;2;1
+t7;#AABBCC;0;2;1

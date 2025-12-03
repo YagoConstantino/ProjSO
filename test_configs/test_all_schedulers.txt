@@ -1,0 +1,13 @@
+# Teste básico para todos os escalonadores
+# Use este arquivo como base e mude a primeira linha para testar diferentes algoritmos:
+# - FIFO;
+# - SRTF;
+# - PRIO;
+# - RR;3
+# - PRIOPENV;3;1
+
+FIFO;
+#id;cor_hex;ingresso;duracao;prioridade
+t1;FF0000;0;4;5
+t2;00FF00;0;3;10
+t3;0000FF;2;2;3

@@ -1,0 +1,8 @@
+# Teste do escalonador PRIOPEnv com envelhecimento
+# Quantum=3, Alpha=2
+
+PRIOPEnv;3;2
+#id;cor_hex;ingresso;duracao;prioridade
+t1;FF0000;0;6;1
+t2;00FF00;2;4;5
+t3;0000FF;4;3;3

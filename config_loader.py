@@ -134,40 +134,42 @@ def parse_io_events(io_string: str) -> List[Tuple[int, int]]:
     io_events, _, _ = parse_events(io_string)
     return io_events
 
-def load_simulation_config(filepath: str) -> Tuple[str, Optional[int], List[TCB]]:
+def load_simulation_config(filepath: str) -> Tuple[str, Optional[int], Optional[int], List[TCB]]:
     """
     Carrega a configuração da simulação a partir de um arquivo de texto.
     
     Formato do arquivo:
-        - Linha 1: ALGORITMO;QUANTUM (ex: 'FIFO;3' ou 'SRTF;')
+        - Linha 1: ALGORITMO;QUANTUM;ALPHA (ex: 'PRIOPEnv;5;1' ou 'FIFO;3' ou 'SRTF;')
         - Linhas seguintes: t<ID>;cor_hex;ingresso;duracao;prioridade;[eventos]
-        - Cor em formato hexadecimal: #RRGGBB ou RRGGBB (ex: #FF0000, ff0000)
-        - Eventos podem incluir: IO:tempo-duracao, ML:tempo, MU:tempo
-        - Linhas começando com '#' são ignoradas (comentários)
     
     Args:
         filepath: Caminho para o arquivo de configuração
     
     Returns:
         Tupla contendo:
-            - scheduler_type (str): Nome do algoritmo (FIFO, SRTF, PRIO, PRIOP, RR, etc.)
-            - quantum (Optional[int]): Valor do quantum (para Round-Robin) ou None
+            - scheduler_type (str): Nome do algoritmo
+            - quantum (Optional[int]): Valor do quantum ou None
+            - alpha (Optional[int]): Valor do alpha para envelhecimento ou None
             - tasks (List[TCB]): Lista de tarefas carregadas
-    
-    Raises:
-        FileNotFoundError: Se o arquivo não for encontrado
-        ValueError: Se houver erro no formato dos dados
     """
     tasks = []
     scheduler_type = ""
     quantum = None
+    alpha = None  # NOVO: Parâmetro alpha para envelhecimento
 
     with open(filepath, 'r') as f:
-        # A primeira linha define o algoritmo e o quantum (ex: "FIFO;3" ou "SRTF;")
+        # A primeira linha define o algoritmo, quantum e alpha
+        # Formato: "ALGORITMO;QUANTUM;ALPHA" ou "ALGORITMO;QUANTUM" ou "ALGORITMO;"
         first_line = f.readline().strip().split(';')
         scheduler_type = first_line[0].strip().upper()
+        
+        # Parseia quantum (segundo campo)
         if len(first_line) > 1 and first_line[1].strip():
             quantum = int(first_line[1].strip())
+        
+        # NOVO: Parseia alpha (terceiro campo) - usado para PRIOPEnv
+        if len(first_line) > 2 and first_line[2].strip():
+            alpha = int(first_line[2].strip())
 
         # As linhas seguintes definem cada tarefa
         for line in f:
@@ -195,7 +197,6 @@ def load_simulation_config(filepath: str) -> Tuple[str, Optional[int], List[TCB]
                 ingresso = int(parts[2])
                 duracao = int(parts[3])
                 
-                # Prioridade: pode estar em parts[4] ou pode ser um evento
                 prioridade = 0
                 events_start_index = 5  # Índice onde começam os eventos
                 
@@ -229,6 +230,7 @@ def load_simulation_config(filepath: str) -> Tuple[str, Optional[int], List[TCB]
                     inicio=ingresso,      # Tempo de chegada da tarefa
                     duracao=duracao,      # Tempo de CPU necessário
                     prio_s=prioridade,    # Prioridade estática
+                    prio_d=prioridade,    # NOVO: prio_d inicia igual a prio_s
                     io_events=io_events,  # Lista de eventos de I/O
                     ml_events=ml_events,  # Lista de eventos de mutex lock
                     mu_events=mu_events   # Lista de eventos de mutex unlock
@@ -239,4 +241,4 @@ def load_simulation_config(filepath: str) -> Tuple[str, Optional[int], List[TCB]
                 print(f"Aviso: ignorando linha mal formatada no arquivo de configuração: '{line.strip()}' - Erro: {e}")
                 continue
             
-    return scheduler_type, quantum, tasks
+    return scheduler_type, quantum, alpha, tasks

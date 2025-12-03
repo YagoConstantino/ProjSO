@@ -1,7 +1,7 @@
-SRTF;2
+PRIOPENV;2
 #id;cor_hex;ingresso;duracao;prioridade;io_events
-t01;46a12d;15;1;10
-t02;906c12;0;7;6
-t03;72b901;6;10;4
-t04;5c6d9c;4;5;7
-t05;9cd7d1;20;4;4
+t01;ed953a;18;5;10
+t02;952286;4;4;8
+t03;90df54;19;3;1
+t04;3f9377;9;4;1
+t05;de2752;2;4;6
