@@ -1,0 +1,7 @@
+SRTF;2
+#id;cor_hex;ingresso;duracao;prioridade;io_events
+t01;83343e;13;8;8
+t02;a50abb;6;4;3
+t03;fbf00c;17;7;3
+t04;a3d638;13;6;8
+t05;cdf891;10;6;9

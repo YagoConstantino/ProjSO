@@ -1,9 +1,9 @@
 SRTF;0
-#id;cor_id;ingresso;duracao;prioridade;io_events
-t01;0;0;8;1
-t02;1;20;6;10
-t03;2;15;6;7
-t04;3;20;3;10
-t05;4;4;8;5
-t06;5;15;4;9
-t07;6;6;4;9
+#id;cor_hex;ingresso;duracao;prioridade;io_events
+t01;ff6b6b;0;8;1
+t02;4ecdc4;20;6;10
+t03;95e1d3;15;6;7
+t04;f38181;20;3;10
+t05;aa96da;4;8;5
+t06;fcbad3;15;4;9
+t07;a8e6cf;6;4;9

@@ -1,4 +1,4 @@
 FIFO;3
-#id;cor_id;ingresso;duracao;prioridade;
-1;0;2;4;2
-2;2;2;5;0
+#id;cor_hex;ingresso;duracao;prioridade;
+1;#FF0000;2;4;2
+2;#0000FF;2;5;0

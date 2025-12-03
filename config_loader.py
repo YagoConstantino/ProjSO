@@ -4,7 +4,8 @@ Lê arquivos .txt contendo definições de algoritmo, quantum e tarefas.
 
 Formato do arquivo de configuração:
     - Linha 1: ALGORITMO;QUANTUM (ex: 'FIFO;3' ou 'SRTF;')
-    - Linhas seguintes: t<ID>;cor_id;ingresso;duracao;prioridade;[eventos]
+    - Linhas seguintes: t<ID>;cor_hex;ingresso;duracao;prioridade;[eventos]
+    - Cor em formato hexadecimal: #RRGGBB ou RRGGBB (ex: #FF0000 ou ff0000)
     - Eventos podem ser: IO:tempo-duracao, ML:tempo (mutex lock), MU:tempo (mutex unlock)
     - Múltiplos eventos são separados por ';'
     - Linhas começando com '#' são ignoradas (comentários)
@@ -13,17 +14,41 @@ Formato do arquivo de configuração:
 from tasks import TCB
 from typing import List, Tuple, Optional, Dict
 
-# Mapeamento de IDs de cores para valores RGB
-# Usado para colorir as tarefas no gráfico de Gantt
-COLOR_MAP = {
-    "0": [255, 0, 0],      # Vermelho
-    "1": [0, 255, 0],      # Verde
-    "2": [0, 0, 255],      # Azul
-    "3": [255, 255, 0],    # Amarelo
-    "4": [0, 255, 255],    # Ciano
-    "5": [255, 0, 255],    # Magenta
-    "6": [125, 22, 123]    # Roxo customizado
-}
+
+def hex_to_rgb(hex_color: str) -> List[int]:
+    """
+    Converte cor hexadecimal para RGB.
+    
+    Args:
+        hex_color: Cor em formato hexadecimal (#RRGGBB ou RRGGBB)
+    
+    Returns:
+        Lista [R, G, B] com valores de 0 a 255
+    
+    Exemplo:
+        >>> hex_to_rgb('#FF0000')
+        [255, 0, 0]
+        >>> hex_to_rgb('00ff00')
+        [0, 255, 0]
+    
+    Raises:
+        ValueError: Se o formato for inválido
+    """
+    # Remove '#' se presente
+    hex_color = hex_color.strip().lstrip('#')
+    
+    # Valida comprimento (deve ser 6 caracteres)
+    if len(hex_color) != 6:
+        raise ValueError(f"Formato hexadecimal inválido: '{hex_color}'. Use RRGGBB ou #RRGGBB")
+    
+    try:
+        # Converte cada par de caracteres hex para decimal
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        return [r, g, b]
+    except ValueError:
+        raise ValueError(f"Formato hexadecimal inválido: '{hex_color}'. Use apenas caracteres 0-9 e A-F")
 
 
 def parse_events(events_string: str) -> Tuple[List[Tuple[int, int]], List[int], List[int]]:
@@ -115,7 +140,8 @@ def load_simulation_config(filepath: str) -> Tuple[str, Optional[int], List[TCB]
     
     Formato do arquivo:
         - Linha 1: ALGORITMO;QUANTUM (ex: 'FIFO;3' ou 'SRTF;')
-        - Linhas seguintes: t<ID>;cor_id;ingresso;duracao;prioridade;[eventos]
+        - Linhas seguintes: t<ID>;cor_hex;ingresso;duracao;prioridade;[eventos]
+        - Cor em formato hexadecimal: #RRGGBB ou RRGGBB (ex: #FF0000, ff0000)
         - Eventos podem incluir: IO:tempo-duracao, ML:tempo, MU:tempo
         - Linhas começando com '#' são ignoradas (comentários)
     
@@ -157,9 +183,13 @@ def load_simulation_config(filepath: str) -> Tuple[str, Optional[int], List[TCB]
                 task_id_str = parts[0].strip().lower().replace('t', '')
                 task_id = int(task_id_str)
                 
-                # Busca a cor no mapeamento ou usa cinza padrão
-                color_id = parts[1].strip()
-                rgb_color = COLOR_MAP.get(color_id, [128, 128, 128])
+                # Converte cor hexadecimal para RGB
+                cor_hex = parts[1].strip()
+                try:
+                    rgb_color = hex_to_rgb(cor_hex)
+                except ValueError as ve:
+                    print(f"Aviso: {ve}. Usando cinza padrão para tarefa {task_id}.")
+                    rgb_color = [128, 128, 128]
 
                 # Extrai os parâmetros temporais e de prioridade
                 ingresso = int(parts[2])

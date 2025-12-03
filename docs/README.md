@@ -52,10 +52,8 @@ python main.py
 
 ```txt
 ALGORITMO;QUANTUM
-#id;cor_id;ingresso;duracao;prioridade;io_events
-t01;0;0;10;5;IO:3-2
-t02;1;2;5;3;IO:2-1;IO:4-1
-t03;2;4;8;4
+#comentário opcional
+t<ID>;cor_hex;ingresso;duracao;prioridade;[IO:tempo-duracao]
 ```
 
 ### Estrutura:
@@ -67,7 +65,7 @@ t03;2;4;8;4
 
 - **Linhas seguintes**: Uma tarefa por linha
   - `t<ID>`: Identificador da tarefa (ex: t01, t02)
-  - `cor_id`: Índice de cor (0-6) para o gráfico
+  - `cor_hex`: Cor em formato hexadecimal (`#RRGGBB` ou `RRGGBB`)
   - `ingresso`: Tempo de chegada da tarefa
   - `duracao`: Tempo de CPU necessário
   - `prioridade`: Prioridade estática (maior = mais prioritária)
@@ -75,14 +73,18 @@ t03;2;4;8;4
     - Múltiplos eventos separados por `;`
     - Exemplo: `IO:2-1;IO:5-2` (I/O aos 2s por 1s, e aos 5s por 2s)
 
-### Cores Disponíveis
-- 0: Vermelho
-- 1: Verde
-- 2: Azul
-- 3: Amarelo
-- 4: Ciano
-- 5: Magenta
-- 6: Roxo
+### Cores Hexadecimais
+Exemplos de cores:
+- `#FF0000` - Vermelho
+- `#00FF00` - Verde
+- `#0000FF` - Azul
+- `#FFFF00` - Amarelo
+- `#00FFFF` - Ciano
+- `#FF00FF` - Magenta
+- `#9932CC` - Roxo
+
+Pode usar com ou sem `#`:
+- `#FF0000` ou `ff0000` (ambos válidos)
 
 ## 🧪 Exemplo de Uso
 

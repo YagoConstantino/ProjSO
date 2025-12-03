@@ -184,12 +184,19 @@ Este é um projeto educacional. Para sugestões ou melhorias:
 ```txt
 ALGORITMO;QUANTUM
 #comentário opcional
-t<ID>;cor_id;ingresso;duracao;prioridade;[IO:tempo-duracao]
+t<ID>;cor_hex;ingresso;duracao;prioridade;[IO:tempo-duracao]
 ```
 
-**Cores disponíveis:**
-- 0: Vermelho | 1: Verde | 2: Azul
-- 3: Amarelo | 4: Ciano | 5: Magenta | 6: Roxo
+**Cores em Hexadecimal:**
+- Formato: `#RRGGBB` ou `RRGGBB` (ex: `#FF0000`, `ff0000`)
+- Exemplos:
+  - `#FF0000` ou `ff0000` - Vermelho
+  - `#00FF00` ou `00ff00` - Verde
+  - `#0000FF` ou `0000ff` - Azul
+  - `#FFFF00` ou `ffff00` - Amarelo
+  - `#00FFFF` ou `00ffff` - Ciano
+  - `#FF00FF` ou `ff00ff` - Magenta
+  - `#9932CC` ou `9932cc` - Roxo
 
 **Eventos I/O:** `IO:3-2;IO:7-1` (bloqueia aos 3s por 2 unidades, aos 7s por 1)
 

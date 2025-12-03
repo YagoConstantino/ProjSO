@@ -12,8 +12,8 @@ Esta pasta contém exemplos de arquivos de configuração para o simulador.
 ```txt
 ALGORITMO;QUANTUM
 #comentário opcional
-t01;cor_id;ingresso;duracao;prioridade;[IO:tempo-duracao]
-t02;cor_id;ingresso;duracao;prioridade
+t01;cor_hex;ingresso;duracao;prioridade;[IO:tempo-duracao]
+t02;cor_hex;ingresso;duracao;prioridade
 ...
 ```
 
@@ -21,7 +21,7 @@ t02;cor_id;ingresso;duracao;prioridade
 - **ALGORITMO**: FIFO, FCFS, SRTF, PRIO, PRIOP, RR
 - **QUANTUM**: Número inteiro (obrigatório para RR, opcional para outros)
 - **t<ID>**: Identificador da tarefa (ex: t01, t02)
-- **cor_id**: 0-6 (veja mapeamento abaixo)
+- **cor_hex**: Cor em formato hexadecimal - `#RRGGBB` ou `RRGGBB`
 - **ingresso**: Tempo de chegada
 - **duracao**: Tempo de CPU necessário
 - **prioridade**: Número inteiro (maior = mais prioritária)
@@ -32,9 +32,8 @@ t02;cor_id;ingresso;duracao;prioridade
   - tempo: Quando bloquear (relativo ao tempo de execução)
   - duracao: Por quanto tempo bloquear
 
-## Mapeamento de Cores
-
-```
+## Exemplos de Cores Hexadecimais
+````
 0 - Vermelho
 1 - Verde
 2 - Azul
