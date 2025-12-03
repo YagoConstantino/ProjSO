@@ -443,25 +443,19 @@ class App(tk.Tk):
         form.pack(fill=tk.BOTH, expand=True)
         
         # Campos de edição
-        Label(form, text="ID:", font=("Arial", 10, "bold")).grid(row=0, column=0, sticky=tk.W, pady=5)
-        id_entry = Entry(form, width=20)
-        id_entry.grid(row=0, column=1, sticky=tk.EW, pady=5)
+        Label(form, text="ID:").grid(row=0, column=0, sticky=tk.W, pady=3)
+        id_entry = Entry(form)
+        id_entry.grid(row=0, column=1, sticky=tk.EW, pady=3)
         id_entry.insert(0, str(task.id))
         
-        Label(form, text="Cor (hex):", font=("Arial", 10)).grid(row=1, column=0, sticky=tk.W, pady=5)
-        cor_entry = Entry(form, width=20)
-        cor_entry.grid(row=1, column=1, sticky=tk.EW, pady=5)
-        cor_entry.insert(0, f"{task.RGB[0]:02x}{task.RGB[1]:02x}{task.RGB[2]:02x}")
-        Label(form, text="Ex: ff0000 ou FF0000", font=("Arial", 8, "italic")).grid(row=1, column=2, sticky=tk.W, padx=5)
-        
-        Label(form, text="Chegada:", font=("Arial", 10)).grid(row=2, column=0, sticky=tk.W, pady=5)
-        chegada_entry = Entry(form, width=20)
-        chegada_entry.grid(row=2, column=1, sticky=tk.EW, pady=5)
+        Label(form, text="Chegada:").grid(row=1, column=0, sticky=tk.W, pady=3)
+        chegada_entry = Entry(form)
+        chegada_entry.grid(row=1, column=1, sticky=tk.EW, pady=3)
         chegada_entry.insert(0, str(task.inicio))
         
-        Label(form, text="Duração:", font=("Arial", 10)).grid(row=3, column=0, sticky=tk.W, pady=5)
-        duracao_entry = Entry(form, width=20)
-        duracao_entry.grid(row=3, column=1, sticky=tk.EW, pady=5)
+        Label(form, text="Duração:").grid(row=2, column=0, sticky=tk.W, pady=3)
+        duracao_entry = Entry(form)
+        duracao_entry.grid(row=2, column=1, sticky=tk.EW, pady=3)
         duracao_entry.insert(0, str(task.duracao))
         
         Label(form, text="Prioridade:", font=("Arial", 10)).grid(row=4, column=0, sticky=tk.W, pady=5)
