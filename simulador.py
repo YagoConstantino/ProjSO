@@ -16,11 +16,12 @@ class Mutex:
     Tarefas que tentam adquirir um mutex já bloqueado entram numa fila de espera.
     """
     
-    def __init__(self):
+    def __init__(self, mutex_id: int = 0):
         """Inicializa o mutex como livre."""
-        self.locked = False               # Estado do mutex: True = bloqueado, False = livre
-        self.owner: Optional[TCB] = None  # Tarefa que possui o lock
-        self.waiting_queue = TCBQueue()   # Fila de tarefas aguardando o mutex
+        self.mutex_id = mutex_id              # ID do mutex
+        self.locked = False                   # Estado do mutex: True = bloqueado, False = livre
+        self.owner: Optional[TCB] = None      # Tarefa que possui o lock
+        self.waiting_queue = TCBQueue()       # Fila de tarefas aguardando o mutex
     
     def try_lock(self, task: TCB) -> bool:
         """
@@ -35,7 +36,7 @@ class Mutex:
         if not self.locked:
             self.locked = True
             self.owner = task
-            task.has_mutex = True
+            task.held_mutexes.append(self.mutex_id)
             return True
         return False
     
@@ -50,14 +51,15 @@ class Mutex:
             Próxima tarefa na fila de espera que foi desbloqueada, ou None
         """
         if self.owner == task:
-            task.has_mutex = False
+            if self.mutex_id in task.held_mutexes:
+                task.held_mutexes.remove(self.mutex_id)
             
             # Verifica se há tarefas aguardando na fila
             if not self.waiting_queue.is_empty():
                 # Passa o mutex para a próxima tarefa na fila
                 next_task = self.waiting_queue.pop_front()
                 self.owner = next_task
-                next_task.has_mutex = True
+                next_task.held_mutexes.append(self.mutex_id)
                 return next_task
             else:
                 # Ninguém esperando, mutex fica livre
@@ -118,14 +120,37 @@ class Simulator:
         self.blocked_mutex_queue = TCBQueue()  # Fila de tarefas bloqueadas por mutex (global - para visualização)
         self.done_tasks = []  # Lista de tarefas concluídas
         
-        # Mutex global para sincronização (Entrega B)
-        self.mutex = Mutex()
+        # Múltiplos mutexes para sincronização (Entrega B)
+        self.mutexes = {}  # Dicionário de mutexes: {mutex_id: Mutex}
+        self._init_mutexes()
         
         self.gantt_data = []  # Dados para o gráfico de Gantt
         
         # Histórico para funcionalidade de voltar - OTIMIZADO
         self.history = []
         self.max_history = 100  # Limita para economizar memória
+    
+    def _init_mutexes(self):
+        """Inicializa os mutexes necessários baseado nos eventos das tarefas."""
+        mutex_ids = set()
+        for task in self.all_tasks:
+            for mutex_id, _ in task.ml_events:
+                mutex_ids.add(mutex_id)
+            for mutex_id, _ in task.mu_events:
+                mutex_ids.add(mutex_id)
+        
+        for mutex_id in mutex_ids:
+            self.mutexes[mutex_id] = Mutex(mutex_id)
+        
+        # Garante que pelo menos o mutex 0 exista (para compatibilidade)
+        if 0 not in self.mutexes:
+            self.mutexes[0] = Mutex(0)
+    
+    def _get_mutex(self, mutex_id: int) -> Mutex:
+        """Obtém um mutex pelo ID, criando-o se não existir."""
+        if mutex_id not in self.mutexes:
+            self.mutexes[mutex_id] = Mutex(mutex_id)
+        return self.mutexes[mutex_id]
 
     def _save_state(self):
         """
@@ -145,10 +170,12 @@ class Simulator:
             'blocked_mutex_ids': [t.id for t in self.blocked_mutex_queue],
             'done_ids': [t.id for t in self.done_tasks],
             'scheduler_quantum': getattr(self.scheduler, 'time_slice_remaining', None),
-            'mutex': {
-                'locked': self.mutex.locked,
-                'owner_id': self.mutex.get_owner_id(),
-                'waiting_ids': [t.id for t in self.mutex.waiting_queue]
+            'mutexes': {
+                mutex_id: {
+                    'locked': mutex.locked,
+                    'owner_id': mutex.get_owner_id(),
+                    'waiting_ids': [t.id for t in mutex.waiting_queue]
+                } for mutex_id, mutex in self.mutexes.items()
             }
         }
         
@@ -166,7 +193,7 @@ class Simulator:
                 'inicioExec': task.inicioExec,
                 'fimExec': task.fimExec,
                 'somaExec': task.somaExec,
-                'has_mutex': task.has_mutex,
+                'held_mutexes': list(task.held_mutexes) if task.held_mutexes else [],
                 'mutex_wait_time': task.mutex_wait_time,
                 'mutex_wait_count': task.mutex_wait_count,
                 'fim': task.fim,
@@ -214,7 +241,7 @@ class Simulator:
                 task.inicioExec = ts['inicioExec']
                 task.fimExec = ts['fimExec']
                 task.somaExec = ts['somaExec']
-                task.has_mutex = ts['has_mutex']
+                task.held_mutexes = list(ts['held_mutexes'])
                 task.mutex_wait_time = ts['mutex_wait_time']
                 task.mutex_wait_count = ts['mutex_wait_count']
                 task.fim = ts['fim']
@@ -229,8 +256,8 @@ class Simulator:
         else:
             self.current_task = None
         
-        # Restaura mutex
-        self._restore_mutex(state['mutex'])
+        # Restaura mutexes
+        self._restore_mutexes(state['mutexes'])
         
         # Remove registros do gantt adicionados neste passo
         gantt_count = state['gantt_count']
@@ -250,6 +277,12 @@ class Simulator:
 
     def _rebuild_queues(self, state: dict):
         """Reconstrói as filas de prontos e bloqueados."""
+        # IMPORTANTE: Limpa ponteiros de TODAS as tarefas primeiro
+        # para evitar referências cruzadas corrompidas
+        for task in self.all_tasks:
+            task.prev = None
+            task.next = None
+        
         # Limpa filas atuais
         self.ready_queue = TCBQueue()
         self.blocked_io_queue = TCBQueue()
@@ -259,43 +292,38 @@ class Simulator:
         for tid in state['ready_queue_ids']:
             task = self._find_task_by_id(tid)
             if task:
-                task.prev = None
-                task.next = None
                 self.ready_queue.push_back(task)
         
         # Reconstrói blocked_io_queue
         for tid in state['blocked_io_ids']:
             task = self._find_task_by_id(tid)
             if task:
-                task.prev = None
-                task.next = None
                 self.blocked_io_queue.push_back(task)
         
         # Reconstrói blocked_mutex_queue
         for tid in state['blocked_mutex_ids']:
             task = self._find_task_by_id(tid)
             if task:
-                task.prev = None
-                task.next = None
                 self.blocked_mutex_queue.push_back(task)
 
-    def _restore_mutex(self, mutex_state: dict):
-        """Restaura o estado do mutex."""
-        self.mutex.locked = mutex_state['locked']
-        
-        if mutex_state['owner_id'] is not None:
-            self.mutex.owner = self._find_task_by_id(mutex_state['owner_id'])
-        else:
-            self.mutex.owner = None
-        
-        # Reconstrói fila de espera do mutex
-        self.mutex.waiting_queue = TCBQueue()
-        for tid in mutex_state['waiting_ids']:
-            task = self._find_task_by_id(tid)
-            if task:
-                task.prev = None
-                task.next = None
-                self.mutex.waiting_queue.push_back(task)
+    def _restore_mutexes(self, mutexes_state: dict):
+        """Restaura o estado de todos os mutexes."""
+        for mutex_id, mutex_state in mutexes_state.items():
+            mutex = self._get_mutex(mutex_id)
+            mutex.locked = mutex_state['locked']
+            
+            if mutex_state['owner_id'] is not None:
+                mutex.owner = self._find_task_by_id(mutex_state['owner_id'])
+            else:
+                mutex.owner = None
+            
+            # Reconstrói fila de espera do mutex
+            # Os ponteiros já foram limpos em _rebuild_queues
+            mutex.waiting_queue = TCBQueue()
+            for tid in mutex_state['waiting_ids']:
+                task = self._find_task_by_id(tid)
+                if task:
+                    mutex.waiting_queue.push_back(task)
 
     def can_step_back(self) -> bool:
         """Verifica se é possível voltar um passo."""
@@ -384,8 +412,10 @@ class Simulator:
         Returns:
             True se a tarefa foi bloqueada (mutex ocupado), False se adquiriu o lock
         """
-        if task.check_mutex_lock_event():
-            if self.mutex.try_lock(task):
+        mutex_id = task.check_mutex_lock_event()
+        if mutex_id is not None:
+            mutex = self._get_mutex(mutex_id)
+            if mutex.try_lock(task):
                 # Conseguiu o lock, continua executando
                 return False
             else:
@@ -393,7 +423,7 @@ class Simulator:
                 task.state = STATE_BLOCKED_MUTEX
                 task.mutex_blocked_until = 0  # Indefinido, aguarda unlock de outra tarefa
                 self.ready_queue.remove(task)
-                self.mutex.add_to_waiting(task)
+                mutex.add_to_waiting(task)
                 self.blocked_mutex_queue.push_back(task)
                 return True
         return False
@@ -408,8 +438,10 @@ class Simulator:
         Returns:
             Tarefa que foi desbloqueada (se houver), ou None
         """
-        if task.check_mutex_unlock_event():
-            unblocked_task = self.mutex.unlock(task)
+        mutex_id = task.check_mutex_unlock_event()
+        if mutex_id is not None:
+            mutex = self._get_mutex(mutex_id)
+            unblocked_task = mutex.unlock(task)
             if unblocked_task:
                 # Remove da fila de bloqueados por mutex e volta para prontos
                 self.blocked_mutex_queue.remove(unblocked_task)
@@ -426,6 +458,87 @@ class Simulator:
             True se todas as tarefas foram concluídas
         """
         return len(self.done_tasks) == len(self.all_tasks)
+    
+    def detect_deadlock(self) -> Optional[List[int]]:
+        """
+        Detecta se há deadlock entre tarefas bloqueadas por mutex.
+        
+        Um deadlock ocorre quando:
+        - Não há tarefas prontas ou em execução
+        - Não há tarefas bloqueadas por I/O
+        - Há tarefas bloqueadas por mutex aguardando umas às outras
+        - Todas as tarefas pendentes estão em um ciclo de espera
+        
+        Returns:
+            Lista de IDs das tarefas em deadlock, ou None se não há deadlock
+        """
+        # Se há tarefas prontas, em execução ou em I/O, não é deadlock
+        if not self.ready_queue.is_empty():
+            return None
+        if self.current_task is not None:
+            return None
+        if not self.blocked_io_queue.is_empty():
+            return None
+        
+        # Se não há tarefas bloqueadas por mutex, não é deadlock
+        if self.blocked_mutex_queue.is_empty():
+            return None
+        
+        # Verificar se ainda há tarefas para chegar
+        for task in self.all_tasks:
+            if task.state == STATE_NEW and task.inicio > self.time:
+                return None  # Ainda há tarefas que vão chegar
+        
+        # Se chegou aqui: não há tarefas prontas, em execução, em I/O,
+        # não há tarefas para chegar, mas há tarefas bloqueadas por mutex
+        # => DEADLOCK!
+        
+        deadlocked_ids = [task.id for task in self.blocked_mutex_queue]
+        return deadlocked_ids if deadlocked_ids else None
+    
+    def is_deadlocked(self) -> bool:
+        """
+        Verifica se o sistema está em deadlock.
+        
+        Returns:
+            True se há deadlock, False caso contrário
+        """
+        return self.detect_deadlock() is not None
+    
+    def get_deadlock_info(self) -> Optional[dict]:
+        """
+        Retorna informações detalhadas sobre o deadlock.
+        
+        Returns:
+            Dicionário com informações do deadlock ou None se não há deadlock
+        """
+        deadlocked = self.detect_deadlock()
+        if deadlocked is None:
+            return None
+        
+        info = {
+            'deadlocked_tasks': deadlocked,
+            'mutex_status': {},
+            'waiting_for': {}
+        }
+        
+        # Para cada tarefa em deadlock, identificar qual mutex ela aguarda
+        for task in self.blocked_mutex_queue:
+            # Verificar em qual fila de espera de mutex a tarefa está
+            for mutex_id, mutex in self.mutexes.items():
+                for waiting_task in mutex.waiting_queue:
+                    if waiting_task.id == task.id:
+                        info['waiting_for'][task.id] = {
+                            'mutex_id': mutex_id,
+                            'owner_id': mutex.get_owner_id()
+                        }
+                        break
+            
+            # Registrar quais mutexes a tarefa possui
+            if task.held_mutexes:
+                info['mutex_status'][task.id] = list(task.held_mutexes)
+        
+        return info
 
     def step(self):
         """
@@ -539,13 +652,15 @@ class Simulator:
                         if isinstance(self.scheduler, PRIOPEnvScheduler):
                             self.scheduler.age_tasks(self.ready_queue)
                         
-                        # Se a tarefa ainda tinha o mutex, libera
-                        if self.current_task.has_mutex:
-                            unblocked = self.mutex.unlock(self.current_task)
-                            if unblocked:
-                                self.blocked_mutex_queue.remove(unblocked)
-                                unblocked.state = STATE_READY
-                                self.ready_queue.push_back(unblocked)
+                        # Se a tarefa ainda tinha mutex(es), libera todos
+                        if self.current_task.held_mutexes:
+                            for mutex_id in list(self.current_task.held_mutexes):
+                                mutex = self._get_mutex(mutex_id)
+                                unblocked = mutex.unlock(self.current_task)
+                                if unblocked:
+                                    self.blocked_mutex_queue.remove(unblocked)
+                                    unblocked.state = STATE_READY
+                                    self.ready_queue.push_back(unblocked)
                         
                         self.done_tasks.append(self.current_task)
                         self.ready_queue.remove(self.current_task)
@@ -565,12 +680,25 @@ class Simulator:
         # 11. Incrementa o relógio
         self.time += 1
 
-    def run_full(self):
+    def run_full(self) -> bool:
         """
-        Executa a simulação completa até todas as tarefas terminarem.
+        Executa a simulação completa até todas as tarefas terminarem ou deadlock.
+        
+        Returns:
+            True se terminou normalmente, False se detectou deadlock
         """
-        while not self.is_finished():
+        max_iterations = 10000  # Limite de segurança
+        iterations = 0
+        
+        while not self.is_finished() and iterations < max_iterations:
             self.step()
+            iterations += 1
+            
+            # Verifica deadlock
+            if self.is_deadlocked():
+                return False
+        
+        return self.is_finished()
     
     def get_statistics(self) -> dict:
         """
@@ -632,15 +760,41 @@ class Simulator:
         
         return stats
     
-    def get_mutex_status(self) -> dict:
+    def get_mutex_status(self, mutex_id: int = 1) -> dict:
         """
-        Retorna o status atual do mutex.
+        Retorna o status atual de um mutex.
+        
+        Args:
+            mutex_id: ID do mutex (default=1 para retrocompatibilidade)
         
         Returns:
             Dicionário com informações do mutex
         """
+        if mutex_id not in self.mutexes:
+            return {
+                'locked': False,
+                'owner_id': None,
+                'waiting_count': 0
+            }
+        mutex = self.mutexes[mutex_id]
         return {
-            'locked': self.mutex.locked,
-            'owner_id': self.mutex.get_owner_id(),
-            'waiting_count': len(self.mutex.waiting_queue)
+            'locked': mutex.locked,
+            'owner_id': mutex.get_owner_id(),
+            'waiting_count': len(mutex.waiting_queue)
         }
+    
+    def get_all_mutex_status(self) -> dict:
+        """
+        Retorna o status de todos os mutexes.
+        
+        Returns:
+            Dicionário com informações de todos os mutexes
+        """
+        result = {}
+        for mutex_id, mutex in self.mutexes.items():
+            result[mutex_id] = {
+                'locked': mutex.locked,
+                'owner_id': mutex.get_owner_id(),
+                'waiting_count': len(mutex.waiting_queue)
+            }
+        return result

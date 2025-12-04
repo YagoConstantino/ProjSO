@@ -64,13 +64,13 @@ class TCB:
     io_blocked_until: int = 0
     tempo_exec_acumulado: int = 0
     
-    # Campos para Mutex (Entrega B)
-    ml_events: List[int] = field(default_factory=list)  # Tempos relativos para mutex lock
-    mu_events: List[int] = field(default_factory=list)  # Tempos relativos para mutex unlock
+    # Campos para Mutex (Entrega B) - Suporte a múltiplos mutexes
+    ml_events: List[Tuple[int, int]] = field(default_factory=list)  # [(mutex_id, tempo), ...] para mutex lock
+    mu_events: List[Tuple[int, int]] = field(default_factory=list)  # [(mutex_id, tempo), ...] para mutex unlock
     mutex_blocked_until: int = 0   # Timestamp de quando será desbloqueado (0 = indefinido, aguarda unlock de outra tarefa)
     mutex_wait_time: int = 0       # Tempo total bloqueado por mutex
     mutex_wait_count: int = 0      # Vezes que esperou pelo mutex
-    has_mutex: bool = False        # Se possui o mutex
+    held_mutexes: List[int] = field(default_factory=list)  # Lista de mutex_ids que a tarefa possui
     
     # Estatísticas
     ativacoes: int = 0
@@ -96,6 +96,8 @@ class TCB:
             self.ml_events = []
         if self.mu_events is None:
             self.mu_events = []
+        if self.held_mutexes is None:
+            self.held_mutexes = []
 
     def reset_dynamic_priority(self):
         """Reseta a prioridade dinâmica para o valor da prioridade estática."""
@@ -116,33 +118,47 @@ class TCB:
                 return (tempo_inicio, duracao)
         return None
     
-    def check_mutex_lock_event(self) -> bool:
+    def check_mutex_lock_event(self) -> Optional[int]:
         """
         Verifica se há um evento de mutex lock que deve ser disparado agora.
         Remove o evento da lista após disparar para não repetir.
         
         Returns:
-            True se deve tentar adquirir o mutex, False caso contrário
+            mutex_id se deve tentar adquirir o mutex, None caso contrário
         """
-        for i, tempo in enumerate(self.ml_events):
+        for i, (mutex_id, tempo) in enumerate(self.ml_events):
             if tempo == self.tempo_exec_acumulado:
                 self.ml_events.pop(i)
-                return True
-        return False
+                return mutex_id
+        return None
     
-    def check_mutex_unlock_event(self) -> bool:
+    def check_mutex_unlock_event(self) -> Optional[int]:
         """
         Verifica se há um evento de mutex unlock que deve ser disparado agora.
         Remove o evento da lista após disparar para não repetir.
         
         Returns:
-            True se deve liberar o mutex, False caso contrário
+            mutex_id se deve liberar o mutex, None caso contrário
         """
-        for i, tempo in enumerate(self.mu_events):
+        for i, (mutex_id, tempo) in enumerate(self.mu_events):
             if tempo == self.tempo_exec_acumulado:
                 self.mu_events.pop(i)
-                return True
-        return False
+                return mutex_id
+        return None
+    
+    def has_mutex(self, mutex_id: int = None) -> bool:
+        """
+        Verifica se a tarefa possui um mutex específico ou qualquer mutex.
+        
+        Args:
+            mutex_id: ID do mutex a verificar, ou None para verificar se possui qualquer mutex
+            
+        Returns:
+            True se possui o mutex especificado (ou qualquer mutex se mutex_id=None)
+        """
+        if mutex_id is None:
+            return len(self.held_mutexes) > 0
+        return mutex_id in self.held_mutexes
 
 class TCBQueue:
     """
@@ -201,6 +217,10 @@ class TCBQueue:
         Args:
             task: Tarefa a ser removida
         """
+        # Verifica se a tarefa está realmente na fila antes de remover
+        if not self._contains(task):
+            return  # Tarefa não está na fila, não faz nada
+        
         if task.prev:
             task.prev.next = task.next
         else:
@@ -213,6 +233,23 @@ class TCBQueue:
 
         task.prev = task.next = None
         self._size -= 1
+    
+    def _contains(self, task: TCB) -> bool:
+        """
+        Verifica se uma tarefa está na fila.
+        
+        Args:
+            task: Tarefa a ser verificada
+            
+        Returns:
+            True se a tarefa está na fila, False caso contrário
+        """
+        current = self.head
+        while current:
+            if current is task:
+                return True
+            current = current.next
+        return False
 
     def __iter__(self):
         """Permite iterar sobre as tarefas na fila."""

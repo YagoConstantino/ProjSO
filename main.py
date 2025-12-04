@@ -304,6 +304,12 @@ class App(tk.Tk):
             self.update_ui()
             self._update_back_button()  # NOVO: Atualiza botão voltar
             
+            # Verifica se há deadlock
+            deadlock_info = self.simulator.get_deadlock_info()
+            if deadlock_info:
+                self._show_deadlock_notification(deadlock_info)
+                return
+            
             # Verifica se a simulação terminou
             if self.simulator.is_finished():
                 self.btn_step.config(state=tk.DISABLED)
@@ -313,6 +319,35 @@ class App(tk.Tk):
                 self.btn_export_svg.config(state=tk.NORMAL)  # ADICIONADO
                 messagebox.showinfo("Simulação Completa", "A simulação foi concluída!")
                 self.show_statistics()
+    
+    def _show_deadlock_notification(self, deadlock_info: dict):
+        """Mostra notificação de deadlock detectado."""
+        self.btn_step.config(state=tk.DISABLED)
+        self.btn_run.config(state=tk.DISABLED)
+        self.btn_stats.config(state=tk.NORMAL)
+        self.btn_export_gantt.config(state=tk.NORMAL)
+        self.btn_export_svg.config(state=tk.NORMAL)
+        
+        # Monta mensagem detalhada
+        tasks_ids = deadlock_info['deadlocked_tasks']
+        msg = f"⚠️ DEADLOCK DETECTADO!\n\n"
+        msg += f"Tarefas envolvidas: {', '.join(f't{tid}' for tid in tasks_ids)}\n\n"
+        
+        msg += "Situação:\n"
+        for tid, held in deadlock_info.get('mutex_status', {}).items():
+            msg += f"  • t{tid} possui mutex(es): {held}\n"
+        
+        msg += "\nAguardando:\n"
+        for tid, wait_info in deadlock_info.get('waiting_for', {}).items():
+            mutex_id = wait_info['mutex_id']
+            owner = wait_info['owner_id']
+            msg += f"  • t{tid} aguarda mutex {mutex_id} (bloqueado por t{owner})\n"
+        
+        msg += f"\nA simulação não pode continuar.\n"
+        msg += f"Tarefas concluídas: {len(self.simulator.done_tasks)}/{len(self.simulator.all_tasks)}"
+        
+        messagebox.showwarning("Deadlock Detectado", msg)
+        self.show_statistics()
 
     def _save_original_tasks_data(self):
         """Salva os dados originais das tarefas para permitir reset correto."""
@@ -832,11 +867,18 @@ class App(tk.Tk):
             messagebox.showerror("Erro", f"Erro ao aplicar: {e}", parent=self.edit_window)
 
     def run_all(self):
-        """Executa a simulação completa até o fim."""
+        """Executa a simulação completa até o fim ou deadlock."""
         if self.simulator:
-            self.simulator.run_full()
+            finished_ok = self.simulator.run_full()
             self.update_ui()
             self._update_back_button()  # NOVO: Atualiza botão voltar
+            
+            # Verifica se houve deadlock
+            deadlock_info = self.simulator.get_deadlock_info()
+            if deadlock_info:
+                self._show_deadlock_notification(deadlock_info)
+                return
+            
             self.btn_step.config(state=tk.DISABLED)
             self.btn_run.config(state=tk.DISABLED)
             self.btn_stats.config(state=tk.NORMAL)

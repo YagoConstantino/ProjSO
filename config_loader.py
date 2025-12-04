@@ -83,8 +83,8 @@ def parse_events(events_string: str) -> Tuple[List[Tuple[int, int]], List[Tuple[
         if not part:
             continue
             
-        if part.startswith('IO:'):
-            # Evento de I/O: formato 'IO:tempo-duracao'
+        if part.startswith('IO:') or part.startswith('IO-'):
+            # Evento de I/O: formato 'IO:tempo-duracao' ou 'IO-tempo-duracao'
             io_data = part[3:].split('-')
             if len(io_data) == 2:
                 try:
@@ -211,12 +211,7 @@ def load_simulation_config(filepath: str) -> Tuple[str, Optional[int], Optional[
                 if len(parts) > events_start_index:
                     events_str = ';'.join(parts[events_start_index:])
                 
-                io_events, ml_events_raw, mu_events_raw = parse_events(events_str)
-                
-                # Converte para formato usado internamente (apenas tempos, ignora mutex_id por enquanto)
-                # TODO: Suportar múltiplos mutexes
-                ml_events = [tempo for (mutex_id, tempo) in ml_events_raw]
-                mu_events = [tempo for (mutex_id, tempo) in mu_events_raw]
+                io_events, ml_events, mu_events = parse_events(events_str)
                 
                 task = TCB(
                     id=task_id,
