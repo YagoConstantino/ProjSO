@@ -463,11 +463,6 @@ class Simulator:
                 self.current_task.somaExec += (self.time - self.current_task.inicioExec)
                 self.current_task = None
         
-        # Registrar tarefas prontas (state = 2)
-        for task in self.all_tasks:
-            if task.state == STATE_READY:
-                self.gantt_data.append((self.time, task.id, task.RGB, "READY"))
-        
         # 4. Seleciona a próxima tarefa a executar
         next_task = self.scheduler.select_next_task(self.ready_queue, self.current_task, self.time)
         
@@ -489,6 +484,12 @@ class Simulator:
                 # Reseta quantum para a nova tarefa
                 if hasattr(self.scheduler, 'reset_quantum'):
                     self.scheduler.reset_quantum()
+        
+        # Registrar tarefas prontas (state = READY) - DEPOIS da troca de contexto
+        # Isso garante que tarefas preemptadas também sejam registradas
+        for task in self.all_tasks:
+            if task.state == STATE_READY and task != self.current_task:
+                self.gantt_data.append((self.time, task.id, task.RGB, "READY"))
         
         # 6. Executa a tarefa atual
         if self.current_task:
