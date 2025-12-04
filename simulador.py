@@ -348,6 +348,7 @@ class Simulator:
         Trata um evento de I/O da tarefa.
         
         O I/O é verificado com base no tempo_exec_acumulado atual.
+        A tarefa executa no ciclo atual e entra em I/O a partir do PRÓXIMO ciclo.
         
         Args:
             task: Tarefa que pode disparar evento de I/O
@@ -359,15 +360,16 @@ class Simulator:
         if io_event:
             _, duracao = io_event
             # Bloqueia a tarefa por 'duracao' unidades de tempo
+            # O I/O começa no PRÓXIMO ciclo (self.time + 1)
             # O desbloqueio acontece quando self.time >= io_blocked_until
-            task.io_blocked_until = self.time + duracao
+            task.io_blocked_until = self.time + 1 + duracao
             task.state = STATE_BLOCKED_IO
             self.ready_queue.remove(task)
             self.blocked_io_queue.push_back(task)
             
-            # Registra o bloqueio no Gantt para os próximos ciclos
-            for t in range(1, duracao):  # Começa em 1 porque o ciclo atual já é registrado
-                self.gantt_data.append((self.time + t, task.id, task.RGB, "IO"))
+            # Registra o bloqueio no Gantt para os ciclos de I/O (começando no próximo)
+            for t in range(duracao):
+                self.gantt_data.append((self.time + 1 + t, task.id, task.RGB, "IO"))
             
             return True
         return False
@@ -501,25 +503,26 @@ class Simulator:
                 self.gantt_data.append((self.time, self.current_task.id, self.current_task.RGB, "MUTEX"))
                 self.current_task = None
             else:
-                # Verifica eventos de I/O ANTES de executar
+                # Executa por 1 unidade de tempo
+                self.current_task.tempo_restante -= 1
+                self.current_task.tempo_exec_acumulado += 1
+                
+                # NOVO: Reseta prioridade dinâmica após executar (PRIOPEnv)
+                if isinstance(self.scheduler, PRIOPEnvScheduler):
+                    self.current_task.prio_d = self.current_task.prio_s
+                
+                # Decrementa quantum (se aplicável)
+                if hasattr(self.scheduler, 'decrement_quantum'):
+                    self.scheduler.decrement_quantum()
+                
+                # Verifica eventos de I/O APÓS executar (baseado no tempo_exec_acumulado atual)
                 if self._handle_io_event(self.current_task):
-                    # Tarefa foi bloqueada por I/O, limpa current_task
-                    self.gantt_data.append((self.time, self.current_task.id, self.current_task.RGB, "IO"))
+                    # Tarefa executou NESTE ciclo, mas entra em I/O APÓS
+                    # Registra este ciclo como EXEC (pois ela executou antes de entrar em I/O)
+                    self.gantt_data.append((self.time, self.current_task.id, self.current_task.RGB, "EXEC"))
                     self.current_task = None
                 else:
-                    # AGORA: Executa por 1 unidade de tempo
-                    self.current_task.tempo_restante -= 1
-                    self.current_task.tempo_exec_acumulado += 1
-                    
-                    # NOVO: Reseta prioridade dinâmica após executar (PRIOPEnv)
-                    if isinstance(self.scheduler, PRIOPEnvScheduler):
-                        self.current_task.prio_d = self.current_task.prio_s
-                    
-                    # Decrementa quantum (se aplicável)
-                    if hasattr(self.scheduler, 'decrement_quantum'):
-                        self.scheduler.decrement_quantum()
-                    
-                    # Registra no Gantt
+                    # Registra no Gantt como execução normal
                     self.gantt_data.append((self.time, self.current_task.id, self.current_task.RGB, "EXEC"))
                     
                     # DEPOIS: Verifica eventos de Mutex Unlock APÓS executar

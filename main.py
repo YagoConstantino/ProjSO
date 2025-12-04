@@ -64,6 +64,7 @@ class App(tk.Tk):
 
         self.simulator = None
         self.loaded_tasks = []
+        self.original_tasks_data = []  # NOVO: Guarda os dados ORIGINAIS das tarefas (não modificados)
         self.current_algo = None
         self.current_quantum = None
         self.current_alpha = None
@@ -201,6 +202,9 @@ class App(tk.Tk):
             self.current_alpha = alpha
             self.loaded_tasks = tasks
             self.current_filepath = filepath  # NOVO: Salva o caminho
+            
+            # NOVO: Salva os dados ORIGINAIS das tarefas (para reset correto)
+            self._save_original_tasks_data()
 
             # Instancia o escalonador com parâmetros apropriados
             if algo_name == "PRIOPENV":
@@ -298,28 +302,42 @@ class App(tk.Tk):
                 messagebox.showinfo("Simulação Completa", "A simulação foi concluída!")
                 self.show_statistics()
 
+    def _save_original_tasks_data(self):
+        """Salva os dados originais das tarefas para permitir reset correto."""
+        self.original_tasks_data = []
+        for task in self.loaded_tasks:
+            self.original_tasks_data.append({
+                'id': task.id,
+                'RGB': list(task.RGB),
+                'inicio': task.inicio,
+                'duracao': task.duracao,
+                'prio_s': task.prio_s,
+                'io_events': list(task.io_events) if task.io_events else [],
+                'ml_events': list(task.ml_events) if task.ml_events else [],
+                'mu_events': list(task.mu_events) if task.mu_events else []
+            })
+
     def reset_simulation(self):
-        """Reinicia a simulação com as tarefas atuais (editadas ou não)."""
-        if not self.loaded_tasks:
+        """Reinicia a simulação com as tarefas ORIGINAIS (preservando I/O, ML, MU)."""
+        if not self.original_tasks_data:
             messagebox.showwarning("Aviso", "Nenhuma configuração carregada.")
             return
         
         try:
-            # Recria cópias limpas das tarefas
-            from copy import deepcopy
+            from tasks import TCB
+            
+            # Recria tarefas a partir dos dados ORIGINAIS salvos
             fresh_tasks = []
-            for task in self.loaded_tasks:
-                # Cria uma nova tarefa com os mesmos parâmetros
-                from tasks import TCB
+            for data in self.original_tasks_data:
                 new_task = TCB(
-                    id=task.id,
-                    RGB=task.RGB,
-                    inicio=task.inicio,
-                    duracao=task.duracao,
-                    prio_s=task.prio_s,
-                    io_events=list(task.io_events) if task.io_events else [],
-                    ml_events=list(task.ml_events) if task.ml_events else [],
-                    mu_events=list(task.mu_events) if task.mu_events else []
+                    id=data['id'],
+                    RGB=list(data['RGB']),
+                    inicio=data['inicio'],
+                    duracao=data['duracao'],
+                    prio_s=data['prio_s'],
+                    io_events=list(data['io_events']),  # Copia da lista ORIGINAL
+                    ml_events=list(data['ml_events']),  # Copia da lista ORIGINAL
+                    mu_events=list(data['mu_events'])   # Copia da lista ORIGINAL
                 )
                 fresh_tasks.append(new_task)
             
@@ -329,7 +347,14 @@ class App(tk.Tk):
             # Recria o simulador
             scheduler_class = SCHEDULER_FACTORY.get(self.current_algo)
             if scheduler_class:
-                scheduler = scheduler_class(quantum=self.current_quantum) if self.current_quantum else scheduler_class()
+                # Instancia o escalonador com parâmetros apropriados
+                if self.current_algo == "PRIOPENV":
+                    scheduler = scheduler_class(quantum=self.current_quantum or 1, alpha=self.current_alpha or 1)
+                elif self.current_quantum:
+                    scheduler = scheduler_class(quantum=self.current_quantum)
+                else:
+                    scheduler = scheduler_class()
+                
                 self.simulator = Simulator(scheduler, self.loaded_tasks)
                 
                 self.btn_step.config(state=tk.NORMAL)
@@ -747,6 +772,9 @@ class App(tk.Tk):
             # IMPORTANTE: Atualiza loaded_tasks com as cópias frescas
             self.loaded_tasks = fresh_tasks
             
+            # NOVO: Atualiza os dados originais para refletir as edições
+            self._save_original_tasks_data()
+            
             # DEBUG
             print(f"[DEBUG] loaded_tasks DEPOIS (cópias frescas):")
             for t in self.loaded_tasks:
@@ -1005,6 +1033,7 @@ class App(tk.Tk):
                 algo_name, quantum, alpha, tasks = load_simulation_config(fp)
                 self.current_algo, self.current_quantum, self.current_alpha, self.loaded_tasks = algo_name, quantum, alpha, tasks
                 self.current_filepath = fp
+                self._save_original_tasks_data()  # NOVO: Salva dados originais
                 sched_class = SCHEDULER_FACTORY.get(algo_name)
                 if sched_class:
                     if algo_name == "PRIOPENV":
