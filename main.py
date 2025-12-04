@@ -85,6 +85,10 @@ class App(tk.Tk):
         self.btn_edit = tk.Button(control_frame, text="✏️ Editar Tarefas", command=self.open_edit_tasks_window, state=tk.DISABLED)
         self.btn_edit.pack(side=tk.LEFT, padx=5)
         
+        # NOVO: Botão Voltar
+        self.btn_back = tk.Button(control_frame, text="⏪ Voltar", command=self.do_step_back, state=tk.DISABLED)
+        self.btn_back.pack(side=tk.LEFT, padx=5)
+        
         self.btn_step = tk.Button(control_frame, text="▶ Passo", command=self.do_step, state=tk.DISABLED)
         self.btn_step.pack(side=tk.LEFT, padx=5)
         
@@ -221,6 +225,7 @@ class App(tk.Tk):
             self.btn_run.config(state=tk.NORMAL)
             self.btn_edit.config(state=tk.NORMAL)
             self.btn_reset.config(state=tk.NORMAL)
+            self.btn_back.config(state=tk.DISABLED)  # NOVO: Inicia desabilitado
             self.btn_stats.config(state=tk.DISABLED)
             self.btn_export_gantt.config(state=tk.DISABLED)
             
@@ -251,10 +256,37 @@ class App(tk.Tk):
         
         self.tasks_table.config(state=tk.DISABLED)
 
+    def do_step_back(self):
+        """Volta um passo na simulação."""
+        if self.simulator and self.simulator.can_step_back():
+            if self.simulator.step_back():
+                self.update_ui()
+                
+                # Reabilita botões se a simulação não terminou
+                if not self.simulator.is_finished():
+                    self.btn_step.config(state=tk.NORMAL)
+                    self.btn_run.config(state=tk.NORMAL)
+                    self.btn_stats.config(state=tk.DISABLED)
+                    self.btn_export_gantt.config(state=tk.DISABLED)
+                    self.btn_export_svg.config(state=tk.DISABLED)
+                
+                # Atualiza estado do botão voltar
+                self._update_back_button()
+        else:
+            messagebox.showinfo("Aviso", "Não há passos anteriores para voltar.")
+
+    def _update_back_button(self):
+        """Atualiza o estado do botão voltar baseado no histórico."""
+        if self.simulator and self.simulator.can_step_back():
+            self.btn_back.config(state=tk.NORMAL)
+        else:
+            self.btn_back.config(state=tk.DISABLED)
+
     def do_step(self):
         if self.simulator:
             self.simulator.step()
             self.update_ui()
+            self._update_back_button()  # NOVO: Atualiza botão voltar
             
             # Verifica se a simulação terminou
             if self.simulator.is_finished():
@@ -262,6 +294,7 @@ class App(tk.Tk):
                 self.btn_run.config(state=tk.DISABLED)
                 self.btn_stats.config(state=tk.NORMAL)
                 self.btn_export_gantt.config(state=tk.NORMAL)
+                self.btn_export_svg.config(state=tk.NORMAL)  # ADICIONADO
                 messagebox.showinfo("Simulação Completa", "A simulação foi concluída!")
                 self.show_statistics()
 
@@ -301,10 +334,12 @@ class App(tk.Tk):
                 
                 self.btn_step.config(state=tk.NORMAL)
                 self.btn_run.config(state=tk.NORMAL)
+                self.btn_back.config(state=tk.DISABLED)  # NOVO: Reset desabilita voltar
                 self.btn_stats.config(state=tk.DISABLED)
                 self.btn_export_gantt.config(state=tk.DISABLED)
                 self.btn_export_svg.config(state=tk.DISABLED)
                 
+                # Atualiza a tabela de tarefas
                 self.update_tasks_table(self.loaded_tasks)
                 self.update_ui()
                 messagebox.showinfo("Reiniciado", "Simulação reiniciada com sucesso!")
@@ -761,6 +796,7 @@ class App(tk.Tk):
         if self.simulator:
             self.simulator.run_full()
             self.update_ui()
+            self._update_back_button()  # NOVO: Atualiza botão voltar
             self.btn_step.config(state=tk.DISABLED)
             self.btn_run.config(state=tk.DISABLED)
             self.btn_stats.config(state=tk.NORMAL)
@@ -968,22 +1004,28 @@ class App(tk.Tk):
                 win.destroy()
                 algo_name, quantum, alpha, tasks = load_simulation_config(fp)
                 self.current_algo, self.current_quantum, self.current_alpha, self.loaded_tasks = algo_name, quantum, alpha, tasks
+                self.current_filepath = fp
                 sched_class = SCHEDULER_FACTORY.get(algo_name)
                 if sched_class:
-                    sched = sched_class(quantum=quantum or 1) if quantum else sched_class()
+                    if algo_name == "PRIOPENV":
+                        sched = sched_class(quantum=quantum or 1, alpha=alpha or 1)
+                    elif quantum:
+                        sched = sched_class(quantum=quantum)
+                    else:
+                        sched = sched_class()
                     self.simulator = Simulator(sched, tasks)
                     self.lbl_algo_name.config(text=f"Algoritmo: {algo_name}")
                     self.btn_step.config(state=tk.NORMAL)
                     self.btn_run.config(state=tk.NORMAL)
                     self.btn_edit.config(state=tk.NORMAL)
                     self.btn_reset.config(state=tk.NORMAL)
+                    self.btn_back.config(state=tk.DISABLED)
                     self.update_tasks_table(tasks)
                     self.update_ui()
         
         Button(fr, text="Gerar", command=gen, bg="#4CAF50", fg="white").grid(row=6, column=0, columnspan=2, pady=20)
 
     def update_ui(self):
-        """Atualiza a interface gráfica com o estado atual da simulação."""
         if not self.simulator:
             return
         
@@ -998,7 +1040,6 @@ class App(tk.Tk):
         self.draw_gantt()
 
     def draw_gantt(self):
-        """Desenha o gráfico de Gantt no canvas."""
         self.gantt_canvas.delete("all")
         if not self.simulator or not self.simulator.all_tasks:
             return
@@ -1006,7 +1047,6 @@ class App(tk.Tk):
         task_ids = sorted([t.id for t in self.simulator.all_tasks], reverse=True)
         task_y_positions = {tid: i * 40 + 20 for i, tid in enumerate(task_ids)}
         
-        # Desenha labels das tarefas
         for tid, y in task_y_positions.items():
             self.gantt_canvas.create_text(20, y, anchor=tk.W, text=f"T{tid}")
         
@@ -1015,7 +1055,6 @@ class App(tk.Tk):
         max_time = -1
         gantt_data = getattr(self.simulator, "gantt_data", []) or []
         
-        # Desenha os blocos
         for entry in gantt_data:
             if len(entry) == 4:
                 time, tid, rgb, state = entry
@@ -1058,7 +1097,6 @@ class App(tk.Tk):
         if max_time < 0:
             max_time = self.simulator.time if self.simulator else 1
         
-        # Desenha eixo do tempo
         total_time = max_time + 1
         x_end = left_margin + total_time * block_width
         max_y = max(task_y_positions.values()) if task_y_positions else 0
@@ -1066,7 +1104,6 @@ class App(tk.Tk):
         
         self.gantt_canvas.create_line(left_margin, eixo_y, x_end, eixo_y, width=2)
         
-        # Marcadores de tempo
         for t in range(1, total_time + 1):
             x_start = left_margin + (t - 1) * block_width
             self.gantt_canvas.create_line(x_start, eixo_y - 6, x_start, eixo_y + 6)

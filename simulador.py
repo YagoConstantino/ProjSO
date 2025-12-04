@@ -95,6 +95,7 @@ class Simulator:
     - Eventos de I/O
     - Sincronização com mutex (lock/unlock)
     - Coleta de estatísticas de execução
+    - Histórico para voltar passos (step_back)
     """
     
     def __init__(self, scheduler: Scheduler, all_tasks: List[TCB]):
@@ -122,37 +123,45 @@ class Simulator:
         
         self.gantt_data = []  # Dados para o gráfico de Gantt
         
-        # Histórico para funcionalidade de voltar
+        # Histórico para funcionalidade de voltar - OTIMIZADO
         self.history = []
-        self.max_history = 1000
+        self.max_history = 100  # Limita para economizar memória
 
     def _save_state(self):
         """
         Salva o estado atual da simulação no histórico.
-        Permite retroceder com step_back().
+        Salva apenas dados essenciais para economizar memória.
         """
+        # Conta quantos registros de gantt existem ANTES deste passo
+        gantt_count_before = len(self.gantt_data)
+        
         state = {
             'time': self.time,
+            'current_task_id': self.current_task.id if self.current_task else None,
+            'gantt_count': gantt_count_before,  # Posição do gantt antes deste step
             'tasks_state': {},
-            'scheduler_state': {}
+            'ready_queue_ids': [t.id for t in self.ready_queue],
+            'blocked_io_ids': [t.id for t in self.blocked_io_queue],
+            'blocked_mutex_ids': [t.id for t in self.blocked_mutex_queue],
+            'done_ids': [t.id for t in self.done_tasks],
+            'scheduler_quantum': getattr(self.scheduler, 'time_slice_remaining', None),
+            'mutex': {
+                'locked': self.mutex.locked,
+                'owner_id': self.mutex.get_owner_id(),
+                'waiting_ids': [t.id for t in self.mutex.waiting_queue]
+            }
         }
         
-        # Salva estado do scheduler (quantum para RR/PRIOPEnv)
-        if isinstance(self.scheduler, (RoundRobinScheduler, PRIOPEnvScheduler)):
-            state['scheduler_state'] = {
-                'time_slice_remaining': self.scheduler.time_slice_remaining
-            }
-        
-        # Salva estado de cada tarefa
+        # Salva estado de cada tarefa (apenas campos que mudam)
         for task in self.all_tasks:
             state['tasks_state'][task.id] = {
                 'state': task.state,
                 'tempo_restante': task.tempo_restante,
                 'tempo_exec_acumulado': task.tempo_exec_acumulado,
                 'io_blocked_until': task.io_blocked_until,
-                'io_events': list(task.io_events or []),
-                'ml_events': list(task.ml_events or []),
-                'mu_events': list(task.mu_events or []),
+                'io_events': list(task.io_events) if task.io_events else [],
+                'ml_events': list(task.ml_events) if task.ml_events else [],
+                'mu_events': list(task.mu_events) if task.mu_events else [],
                 'ativacoes': task.ativacoes,
                 'inicioExec': task.inicioExec,
                 'fimExec': task.fimExec,
@@ -161,22 +170,136 @@ class Simulator:
                 'mutex_wait_time': task.mutex_wait_time,
                 'mutex_wait_count': task.mutex_wait_count,
                 'fim': task.fim,
-                'prio_d': task.prio_d  # NOVO: Salva prioridade dinâmica
+                'prio_d': task.prio_d
             }
         
-        # Salva estado do mutex
-        state['mutex'] = {
-            'locked': self.mutex.locked,
-            'owner_id': self.mutex.get_owner_id(),
-            'waiting_ids': [t.id for t in self.mutex.waiting_queue]
-        }
-        
-        # Adiciona ao histórico
         self.history.append(state)
         
         # Limita tamanho do histórico
         if len(self.history) > self.max_history:
             self.history.pop(0)
+
+    def step_back(self) -> bool:
+        """
+        Volta um passo na simulação, restaurando o estado anterior.
+        
+        Returns:
+            True se conseguiu voltar, False se não há histórico
+        """
+        if not self.history:
+            return False
+        
+        # Pega o estado anterior
+        state = self.history.pop()
+        
+        # Restaura tempo
+        self.time = state['time']
+        
+        # Restaura quantum do scheduler
+        if state['scheduler_quantum'] is not None and hasattr(self.scheduler, 'time_slice_remaining'):
+            self.scheduler.time_slice_remaining = state['scheduler_quantum']
+        
+        # Restaura estado de cada tarefa
+        for task in self.all_tasks:
+            if task.id in state['tasks_state']:
+                ts = state['tasks_state'][task.id]
+                task.state = ts['state']
+                task.tempo_restante = ts['tempo_restante']
+                task.tempo_exec_acumulado = ts['tempo_exec_acumulado']
+                task.io_blocked_until = ts['io_blocked_until']
+                task.io_events = list(ts['io_events'])
+                task.ml_events = list(ts['ml_events'])
+                task.mu_events = list(ts['mu_events'])
+                task.ativacoes = ts['ativacoes']
+                task.inicioExec = ts['inicioExec']
+                task.fimExec = ts['fimExec']
+                task.somaExec = ts['somaExec']
+                task.has_mutex = ts['has_mutex']
+                task.mutex_wait_time = ts['mutex_wait_time']
+                task.mutex_wait_count = ts['mutex_wait_count']
+                task.fim = ts['fim']
+                task.prio_d = ts['prio_d']
+        
+        # Reconstrói filas baseado nos IDs salvos
+        self._rebuild_queues(state)
+        
+        # Restaura current_task
+        if state['current_task_id'] is not None:
+            self.current_task = self._find_task_by_id(state['current_task_id'])
+        else:
+            self.current_task = None
+        
+        # Restaura mutex
+        self._restore_mutex(state['mutex'])
+        
+        # Remove registros do gantt adicionados neste passo
+        gantt_count = state['gantt_count']
+        self.gantt_data = self.gantt_data[:gantt_count]
+        
+        # Restaura done_tasks
+        self.done_tasks = [self._find_task_by_id(tid) for tid in state['done_ids']]
+        
+        return True
+
+    def _find_task_by_id(self, task_id) -> Optional[TCB]:
+        """Busca tarefa pelo ID."""
+        for task in self.all_tasks:
+            if task.id == task_id:
+                return task
+        return None
+
+    def _rebuild_queues(self, state: dict):
+        """Reconstrói as filas de prontos e bloqueados."""
+        # Limpa filas atuais
+        self.ready_queue = TCBQueue()
+        self.blocked_io_queue = TCBQueue()
+        self.blocked_mutex_queue = TCBQueue()
+        
+        # Reconstrói ready_queue na ordem correta
+        for tid in state['ready_queue_ids']:
+            task = self._find_task_by_id(tid)
+            if task:
+                task.prev = None
+                task.next = None
+                self.ready_queue.push_back(task)
+        
+        # Reconstrói blocked_io_queue
+        for tid in state['blocked_io_ids']:
+            task = self._find_task_by_id(tid)
+            if task:
+                task.prev = None
+                task.next = None
+                self.blocked_io_queue.push_back(task)
+        
+        # Reconstrói blocked_mutex_queue
+        for tid in state['blocked_mutex_ids']:
+            task = self._find_task_by_id(tid)
+            if task:
+                task.prev = None
+                task.next = None
+                self.blocked_mutex_queue.push_back(task)
+
+    def _restore_mutex(self, mutex_state: dict):
+        """Restaura o estado do mutex."""
+        self.mutex.locked = mutex_state['locked']
+        
+        if mutex_state['owner_id'] is not None:
+            self.mutex.owner = self._find_task_by_id(mutex_state['owner_id'])
+        else:
+            self.mutex.owner = None
+        
+        # Reconstrói fila de espera do mutex
+        self.mutex.waiting_queue = TCBQueue()
+        for tid in mutex_state['waiting_ids']:
+            task = self._find_task_by_id(tid)
+            if task:
+                task.prev = None
+                task.next = None
+                self.mutex.waiting_queue.push_back(task)
+
+    def can_step_back(self) -> bool:
+        """Verifica se é possível voltar um passo."""
+        return len(self.history) > 0
 
     # Alias para compatibilidade com código existente
     @property
@@ -188,22 +311,27 @@ class Simulator:
         """
         Verifica se há novas tarefas chegando no tempo atual.
         Move tarefas de NEW (estado 1) para READY (estado 2).
-        NOVO: Aplica envelhecimento nas tarefas prontas quando nova tarefa chega.
+        Aplica envelhecimento nas tarefas prontas quando nova tarefa chega (PRIOPEnv).
         """
+        new_arrivals = []
         for task in self.all_tasks:
             if task.state == STATE_NEW and task.inicio == self.time:
                 task.state = STATE_READY
                 task.prio_d = task.prio_s  # Reseta prioridade dinâmica ao chegar
                 self.ready_queue.push_back(task)
-                
-                # NOVO: Aplica envelhecimento nas outras tarefas prontas
-                if isinstance(self.scheduler, PRIOPEnvScheduler):
-                    self.scheduler.age_tasks(self.ready_queue, exclude_task=task)
-    
+                new_arrivals.append(task)
+        
+        # Aplica envelhecimento APENAS se houve novas chegadas
+        if new_arrivals and isinstance(self.scheduler, PRIOPEnvScheduler):
+            for new_task in new_arrivals:
+                # Envelhece todas as tarefas prontas EXCETO a que acabou de chegar
+                self.scheduler.age_tasks(self.ready_queue, exclude_task=new_task)
+
     def _check_io_unblock(self):
         """
         Verifica se há tarefas bloqueadas que completaram seu I/O.
         Move tarefas da fila de bloqueadas para a fila de prontos.
+        NÃO aplica envelhecimento aqui - apenas na chegada de novas tarefas e término.
         """
         tasks_to_unblock = []
         for task in self.blocked_io_queue:
@@ -214,7 +342,7 @@ class Simulator:
             self.blocked_io_queue.remove(task)
             task.state = STATE_READY
             self.ready_queue.push_back(task)
-    
+
     def _handle_io_event(self, task: TCB) -> bool:
         """
         Trata um evento de I/O da tarefa.
@@ -382,6 +510,10 @@ class Simulator:
                     self.current_task.tempo_restante -= 1
                     self.current_task.tempo_exec_acumulado += 1
                     
+                    # NOVO: Reseta prioridade dinâmica após executar (PRIOPEnv)
+                    if isinstance(self.scheduler, PRIOPEnvScheduler):
+                        self.current_task.prio_d = self.current_task.prio_s
+                    
                     # Decrementa quantum (se aplicável)
                     if hasattr(self.scheduler, 'decrement_quantum'):
                         self.scheduler.decrement_quantum()
@@ -395,11 +527,11 @@ class Simulator:
                     # Verifica se a tarefa terminou
                     if self.current_task.tempo_restante <= 0:
                         self.current_task.state = STATE_TERMINATED
-                        self.current_task.fim = self.time + 1  # Marca o tempo de término
+                        self.current_task.fim = self.time + 1
                         self.current_task.fimExec = self.time + 1
                         self.current_task.somaExec += ((self.time + 1) - self.current_task.inicioExec)
                         
-                        # NOVO: Aplica envelhecimento quando tarefa termina
+                        # Aplica envelhecimento quando tarefa TERMINA (PRIOPEnv)
                         if isinstance(self.scheduler, PRIOPEnvScheduler):
                             self.scheduler.age_tasks(self.ready_queue)
                         

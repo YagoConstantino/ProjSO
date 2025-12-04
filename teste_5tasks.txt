@@ -1,0 +1,7 @@
+PRIOPENV;2
+#id;cor;chegada;duracao;prioridade
+t01;f8d917;6;2;5
+t02;bcfe72;1;8;5
+t03;b0ae1c;4;4;7
+t04;9edc37;7;4;5
+t05;7afca8;3;8;1

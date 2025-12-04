@@ -136,8 +136,9 @@ class PRIOPEnvScheduler(Scheduler):
     Escalonador Preemptivo por Prioridades com Envelhecimento (PRIOPEnv).
     
     Características:
-    - Preemptivo: tarefa de maior prioridade sempre executa
-    - Envelhecimento: tarefas prontas ganham +alpha na prioridade dinâmica
+    - Preemptivo: tarefa de maior prioridade dinâmica sempre executa
+    - Envelhecimento: tarefas prontas ganham +alpha na prioridade dinâmica a cada ciclo
+    - Após executar, a tarefa tem sua prioridade dinâmica resetada para a estática
     - Evita starvation de tarefas de baixa prioridade
     
     Atributos:
@@ -186,7 +187,7 @@ class PRIOPEnvScheduler(Scheduler):
                 best_task = task
         
         # Preempção: se a melhor tarefa tem prioridade maior que a atual, troca
-        if current_task and best_task:
+        if current_task and current_task in ready_queue and best_task:
             if best_task.prio_d > current_task.prio_d:
                 return best_task
             elif best_task.prio_d == current_task.prio_d:
@@ -208,7 +209,11 @@ class PRIOPEnvScheduler(Scheduler):
     def age_tasks(self, ready_queue, exclude_task=None):
         """
         Aplica envelhecimento a todas as tarefas na fila de prontos.
-        Incrementa prio_d em +alpha para cada tarefa.
+        Incrementa prio_d em +alpha para cada tarefa (exceto a excluída).
+        
+        O envelhecimento é aplicado quando:
+        - Uma nova tarefa chega
+        - Uma tarefa termina
         
         Args:
             ready_queue: Fila de tarefas prontas
@@ -217,6 +222,8 @@ class PRIOPEnvScheduler(Scheduler):
         for task in ready_queue:
             if task != exclude_task:
                 task.prio_d += self.alpha
+                # Debug opcional
+                # print(f"[AGING] T{task.id}: prio_d {task.prio_d - self.alpha} -> {task.prio_d}")
 
 
 # Alias para compatibilidade

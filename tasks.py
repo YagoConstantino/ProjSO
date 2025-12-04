@@ -86,9 +86,8 @@ class TCB:
         """Inicializa o tempo restante igual à duração total e garante listas não-None."""
         self.tempo_restante = self.duracao
         
-        # Inicializa prio_d com prio_s se não foi definido
-        if self.prio_d == 0 and self.prio_s != 0:
-            self.prio_d = self.prio_s
+        # CORRIGIDO: prio_d SEMPRE inicia igual a prio_s
+        self.prio_d = self.prio_s
         
         # Garante que listas NUNCA sejam None
         if self.io_events is None:
@@ -97,6 +96,10 @@ class TCB:
             self.ml_events = []
         if self.mu_events is None:
             self.mu_events = []
+
+    def reset_dynamic_priority(self):
+        """Reseta a prioridade dinâmica para o valor da prioridade estática."""
+        self.prio_d = self.prio_s
 
     def check_io_event(self) -> Optional[Tuple[int, int]]:
         """
