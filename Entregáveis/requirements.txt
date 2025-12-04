@@ -1,0 +1,33 @@
+# ========================================
+# BUILD DEPENDENCIES
+# ========================================
+pyinstaller
+
+# ========================================
+# PROJECT DEPENDENCIES
+# ========================================
+# Pillow: Required for exporting Gantt chart as PNG
+pillow
+
+# Standard libraries (included in Python):
+# - tkinter: GUI interface
+# - random: Random number generation
+# - typing: Type hints
+# - dataclasses: Data structures
+# - os, sys: System operations
+#
+# ========================================
+# INSTALLATION
+# ========================================
+#
+# Windows:
+#   python --version
+#   python -m pip install -r requirements.txt
+#   python main.py
+#
+# Linux/macOS:
+#   python3 --version
+#   python3 -m pip install -r requirements.txt
+#   python3 main.py
+#
+# ========================================
