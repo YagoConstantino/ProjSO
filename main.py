@@ -5,7 +5,7 @@ from tkinter import (
 )
 
 from config_loader import load_simulation_config
-from scheduler import FIFOScheduler, SRTFScheduler, PriorityScheduler, RoundRobinScheduler, PRIOPEnvScheduler
+from scheduler import FIFOScheduler, SRTFScheduler, PriorityScheduler, RoundRobinScheduler, PRIOPEnvScheduler, PRIOPEnvTickScheduler
 from simulador import Simulator
 import random
 import os
@@ -48,7 +48,8 @@ SCHEDULER_FACTORY = {
     "PRIO": PriorityScheduler,
     "PRIOP": PriorityScheduler,
     "RR": RoundRobinScheduler,
-    "PRIOPENV": PRIOPEnvScheduler,  # NOVO: Prioridade com envelhecimento
+    "PRIOPENV": PRIOPEnvScheduler,  # Prioridade com envelhecimento (chegada/término)
+    "PRIOPENV-T": PRIOPEnvTickScheduler,  # Prioridade com envelhecimento por tick
 }
 
 class App(tk.Tk):
@@ -207,8 +208,8 @@ class App(tk.Tk):
             self._save_original_tasks_data()
 
             # Instancia o escalonador com parâmetros apropriados
-            if algo_name == "PRIOPENV":
-                # PRIOPEnv precisa de quantum e alpha
+            if algo_name in ("PRIOPENV", "PRIOPENV-T"):
+                # PRIOPEnv e PRIOPEnv-T precisam de quantum e alpha
                 scheduler = scheduler_class(quantum=quantum or 1, alpha=alpha or 1)
             elif quantum:
                 scheduler = scheduler_class(quantum=quantum)
@@ -247,15 +248,26 @@ class App(tk.Tk):
         self.tasks_table.config(state=tk.NORMAL)
         self.tasks_table.delete("1.0", tk.END)
         
+        # Verifica se é PRIOPEnv ou PRIOPEnv-T para mostrar prioridade dinâmica
+        is_priopenv = self.current_algo in ("PRIOPENV", "PRIOPENV-T")
+        
         # Cabeçalho
-        header = f"{'ID':<8} {'Cor':<8} {'Chegada':<9} {'Duração':<9} {'Prioridade':<11} {'I/O Events':<30}\n"
-        self.tasks_table.insert(tk.END, header)
-        self.tasks_table.insert(tk.END, "=" * 80 + "\n")
+        if is_priopenv:
+            header = f"{'ID':<6} {'Cor':<8} {'Cheg':<6} {'Dur':<5} {'PrioS':<6} {'PrioD':<6} {'I/O Events':<20}\n"
+            self.tasks_table.insert(tk.END, header)
+            self.tasks_table.insert(tk.END, "=" * 70 + "\n")
+        else:
+            header = f"{'ID':<8} {'Cor':<8} {'Chegada':<9} {'Duração':<9} {'Prioridade':<11} {'I/O Events':<30}\n"
+            self.tasks_table.insert(tk.END, header)
+            self.tasks_table.insert(tk.END, "=" * 80 + "\n")
         
         # Dados das tarefas
         for task in sorted(tasks, key=lambda t: t.id):
             io_str = ", ".join([f"{t}-{d}" for t, d in task.io_events]) if task.io_events else ""
-            line = f"{task.id:<8} {task.RGB[0]:02x}{task.RGB[1]:02x}{task.RGB[2]:02x}  {task.inicio:<9} {task.duracao:<9} {task.prio_s:<11} {io_str:<30}\n"
+            if is_priopenv:
+                line = f"{task.id:<6} {task.RGB[0]:02x}{task.RGB[1]:02x}{task.RGB[2]:02x}  {task.inicio:<6} {task.duracao:<5} {task.prio_s:<6} {task.prio_d:<6} {io_str:<20}\n"
+            else:
+                line = f"{task.id:<8} {task.RGB[0]:02x}{task.RGB[1]:02x}{task.RGB[2]:02x}  {task.inicio:<9} {task.duracao:<9} {task.prio_s:<11} {io_str:<30}\n"
             self.tasks_table.insert(tk.END, line)
         
         self.tasks_table.config(state=tk.DISABLED)
@@ -348,7 +360,7 @@ class App(tk.Tk):
             scheduler_class = SCHEDULER_FACTORY.get(self.current_algo)
             if scheduler_class:
                 # Instancia o escalonador com parâmetros apropriados
-                if self.current_algo == "PRIOPENV":
+                if self.current_algo in ("PRIOPENV", "PRIOPENV-T"):
                     scheduler = scheduler_class(quantum=self.current_quantum or 1, alpha=self.current_alpha or 1)
                 elif self.current_quantum:
                     scheduler = scheduler_class(quantum=self.current_quantum)
@@ -393,7 +405,7 @@ class App(tk.Tk):
         
         Label(config_frame, text="Algoritmo:", bg="#E8F4F8").grid(row=0, column=1, padx=(20, 5))
         self.edit_algo_var = tk.StringVar(value=self.current_algo or "FIFO")
-        algo_combo = tk.OptionMenu(config_frame, self.edit_algo_var, "FIFO", "FCFS", "SRTF", "PRIO", "PRIOP", "RR", "PRIOPENV")
+        algo_combo = tk.OptionMenu(config_frame, self.edit_algo_var, "FIFO", "FCFS", "SRTF", "PRIO", "PRIOP", "RR", "PRIOPENV", "PRIOPENV-T")
         algo_combo.grid(row=0, column=2, padx=5)
         
         Label(config_frame, text="Quantum:", bg="#E8F4F8").grid(row=0, column=3, padx=(20, 5))
@@ -783,7 +795,7 @@ class App(tk.Tk):
             # 6. Recria o simulador com o novo algoritmo
             scheduler_class = SCHEDULER_FACTORY.get(self.current_algo)
             if scheduler_class:
-                if self.current_algo == "PRIOPENV":
+                if self.current_algo in ("PRIOPENV", "PRIOPENV-T"):
                     scheduler = scheduler_class(
                         quantum=self.current_quantum or 1, 
                         alpha=self.current_alpha or 1
@@ -1036,7 +1048,7 @@ class App(tk.Tk):
                 self._save_original_tasks_data()  # NOVO: Salva dados originais
                 sched_class = SCHEDULER_FACTORY.get(algo_name)
                 if sched_class:
-                    if algo_name == "PRIOPENV":
+                    if algo_name in ("PRIOPENV", "PRIOPENV-T"):
                         sched = sched_class(quantum=quantum or 1, alpha=alpha or 1)
                     elif quantum:
                         sched = sched_class(quantum=quantum)
@@ -1065,6 +1077,10 @@ class App(tk.Tk):
         
         ready_ids = [t.id for t in self.simulator.ready_queue]
         self.lbl_ready_queue.config(text=f"Fila de Prontos: {ready_ids}")
+        
+        # Atualiza tabela de tarefas (para mostrar prioridade dinâmica atualizada)
+        if self.current_algo in ("PRIOPENV", "PRIOPENV-T"):
+            self.update_tasks_table(self.simulator.all_tasks)
         
         self.draw_gantt()
 

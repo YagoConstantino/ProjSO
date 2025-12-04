@@ -4,7 +4,7 @@ Gerencia a execução das tarefas, eventos de I/O, sincronização com mutex e c
 """
 
 from tasks import TCB, TCBQueue, STATE_NEW, STATE_READY, STATE_RUNNING, STATE_BLOCKED_IO, STATE_TERMINATED, STATE_BLOCKED_MUTEX
-from scheduler import Scheduler, RoundRobinScheduler, PRIOPEnvScheduler
+from scheduler import Scheduler, RoundRobinScheduler, PRIOPEnvScheduler, PRIOPEnvTickScheduler
 from typing import List, Optional
 
 
@@ -557,6 +557,10 @@ class Simulator:
         # Atualiza tempo de espera por mutex para tarefas bloqueadas
         for task in self.blocked_mutex_queue:
             task.mutex_wait_time += 1
+        
+        # Envelhecimento por tick (PRIOPEnv-T): aplica a cada ciclo de clock
+        if isinstance(self.scheduler, PRIOPEnvTickScheduler):
+            self.scheduler.age_tasks_tick(self.ready_queue, self.current_task)
 
         # 11. Incrementa o relógio
         self.time += 1

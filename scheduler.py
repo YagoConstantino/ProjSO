@@ -226,5 +226,45 @@ class PRIOPEnvScheduler(Scheduler):
                 # print(f"[AGING] T{task.id}: prio_d {task.prio_d - self.alpha} -> {task.prio_d}")
 
 
+class PRIOPEnvTickScheduler(PRIOPEnvScheduler):
+    """
+    Escalonador Preemptivo por Prioridades com Envelhecimento por Tick (PRIOPEnv-T).
+    
+    Similar ao PRIOPEnv, mas o envelhecimento é aplicado a cada tick (unidade de tempo)
+    ao invés de apenas na chegada de novas tarefas ou término.
+    
+    Características:
+    - Preemptivo: tarefa de maior prioridade dinâmica sempre executa
+    - Envelhecimento por tick: tarefas prontas ganham +alpha a cada ciclo de clock
+    - Após executar, a tarefa tem sua prioridade dinâmica resetada para a estática
+    - Evita starvation de tarefas de baixa prioridade mais rapidamente
+    """
+    
+    def __init__(self, quantum: int = 1, alpha: int = 1):
+        """
+        Inicializa o escalonador PRIOPEnv-T.
+        
+        Args:
+            quantum: Fatia de tempo para cada tarefa
+            alpha: Incremento de prioridade no envelhecimento (por tick)
+        """
+        super().__init__(quantum, alpha)
+        self.aging_per_tick = True  # Flag para identificar envelhecimento por tick
+    
+    def age_tasks_tick(self, ready_queue, executing_task=None):
+        """
+        Aplica envelhecimento a todas as tarefas na fila de prontos a cada tick.
+        A tarefa em execução NÃO envelhece (ela está executando, não esperando).
+        
+        Args:
+            ready_queue: Fila de tarefas prontas
+            executing_task: Tarefa atualmente em execução (não envelhece)
+        """
+        for task in ready_queue:
+            if task != executing_task:
+                task.prio_d += self.alpha
+
+
 # Alias para compatibilidade
 PRIOPEnv = PRIOPEnvScheduler
+PRIOPEnvTick = PRIOPEnvTickScheduler
