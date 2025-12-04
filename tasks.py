@@ -143,7 +143,6 @@ class TCB:
                 self.mu_events.pop(i)
                 return True
         return False
-        return None
 
 class TCBQueue:
     """

@@ -1,0 +1,9 @@
+PRIOP;3
+#id;cor_hex;ingresso;duracao;prioridade;eventos
+t01;448109;2;8;2;IO:3-2
+t02;ba9bb4;17;5;8
+t03;4c9477;6;9;4
+t04;166c5b;7;8;4
+t05;be00f1;7;9;3
+t06;00fd90;11;5;5
+t07;c8282f;11;2;1

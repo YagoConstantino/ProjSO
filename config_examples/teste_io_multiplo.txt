@@ -1,0 +1,8 @@
+SRTF;
+#id;cor;chegada;duracao;prioridade;eventos
+# T1: duração 6, múltiplos I/Os
+t01;ff0000;0;6;5;IO:1-1;IO:4-2
+# T2: duração 4, um I/O
+t02;00ff00;1;4;5;IO:2-1
+# T3: duração 2, sem I/O
+t03;0000ff;2;2;5

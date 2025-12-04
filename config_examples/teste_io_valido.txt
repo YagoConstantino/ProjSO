@@ -1,0 +1,12 @@
+PRIOP;3
+#id;cor_hex;ingresso;duracao;prioridade;eventos
+# T01: duração 5, I/O no tempo relativo 2 (válido: 2 < 5)
+t01;448109;2;5;2;IO:2-2
+# T02: sem I/O
+t02;ba9bb4;17;5;8
+# T03: I/O no tempo 1 (válido: 1 < 9)
+t03;4c9477;6;9;4;IO:1-1
+t04;166c5b;7;8;4
+t05;be00f1;7;9;3
+t06;00fd90;11;5;5
+t07;c8282f;11;2;1

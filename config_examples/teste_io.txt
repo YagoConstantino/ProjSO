@@ -1,0 +1,6 @@
+FIFO;
+#id;cor;chegada;duracao;prioridade;eventos
+# T1: duração 5, I/O no tempo relativo 2 (após 2 ciclos de execução), duração do I/O = 2
+t01;ff0000;0;5;5;IO:2-2
+# T2: duração 3, sem I/O (deve executar enquanto T1 está bloqueada)
+t02;00ff00;0;3;5

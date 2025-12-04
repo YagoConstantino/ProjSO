@@ -51,34 +51,31 @@ def hex_to_rgb(hex_color: str) -> List[int]:
         raise ValueError(f"Formato hexadecimal inválido: '{hex_color}'. Use apenas caracteres 0-9 e A-F")
 
 
-def parse_events(events_string: str) -> Tuple[List[Tuple[int, int]], List[int], List[int]]:
+def parse_events(events_string: str) -> Tuple[List[Tuple[int, int]], List[Tuple[int, int]], List[Tuple[int, int]]]:
     """
     Analisa string de eventos e extrai I/O, mutex lock e mutex unlock.
     
     Args:
         events_string: String contendo eventos separados por ';'
             - IO:tempo-duracao (ex: 'IO:2-1')
-            - ML:tempo (ex: 'ML:1') - Mutex Lock
-            - MU:tempo (ex: 'MU:3') - Mutex Unlock
+            - MLxx:tempo (ex: 'ML01:1') - Mutex Lock do mutex xx no tempo
+            - MUxx:tempo (ex: 'MU01:3') - Mutex Unlock do mutex xx no tempo
+            - ML:tempo (formato simplificado para mutex 0)
+            - MU:tempo (formato simplificado para mutex 0)
     
     Returns:
         Tupla contendo:
             - io_events: Lista de tuplas (tempo_inicio, duracao) para eventos I/O
-            - ml_events: Lista de tempos relativos para mutex lock
-            - mu_events: Lista de tempos relativos para mutex unlock
-    
-    Exemplo:
-        >>> parse_events('ML:1;IO:2-1;MU:3')
-        ([(2, 1)], [1], [3])
+            - ml_events: Lista de tuplas (mutex_id, tempo) para mutex lock
+            - mu_events: Lista de tuplas (mutex_id, tempo) para mutex unlock
     """
     io_events = []
-    ml_events = []
-    mu_events = []
+    ml_events = []  # Agora é lista de tuplas (mutex_id, tempo)
+    mu_events = []  # Agora é lista de tuplas (mutex_id, tempo)
     
     if not events_string:
         return io_events, ml_events, mu_events
     
-    # Divide múltiplos eventos separados por ';'
     parts = events_string.split(';')
     
     for part in parts:
@@ -97,19 +94,29 @@ def parse_events(events_string: str) -> Tuple[List[Tuple[int, int]], List[int], 
                 except ValueError:
                     print(f"Aviso: formato de I/O inválido: '{part}'")
         
-        elif part.startswith('ML:'):
-            # Evento de Mutex Lock: formato 'ML:tempo'
+        elif part.startswith('ML'):
+            # Evento de Mutex Lock: formato 'MLxx:tempo' ou 'ML:tempo'
             try:
-                tempo = int(part[3:])
-                ml_events.append(tempo)
+                if ':' in part:
+                    prefix, tempo_str = part.split(':', 1)
+                    tempo = int(tempo_str)
+                    # Extrai número do mutex (ex: ML01 -> 1, ML -> 0)
+                    mutex_id_str = prefix[2:]  # Remove 'ML'
+                    mutex_id = int(mutex_id_str) if mutex_id_str else 0
+                    ml_events.append((mutex_id, tempo))
             except ValueError:
                 print(f"Aviso: formato de ML inválido: '{part}'")
         
-        elif part.startswith('MU:'):
-            # Evento de Mutex Unlock: formato 'MU:tempo'
+        elif part.startswith('MU'):
+            # Evento de Mutex Unlock: formato 'MUxx:tempo' ou 'MU:tempo'
             try:
-                tempo = int(part[3:])
-                mu_events.append(tempo)
+                if ':' in part:
+                    prefix, tempo_str = part.split(':', 1)
+                    tempo = int(tempo_str)
+                    # Extrai número do mutex (ex: MU01 -> 1, MU -> 0)
+                    mutex_id_str = prefix[2:]  # Remove 'MU'
+                    mutex_id = int(mutex_id_str) if mutex_id_str else 0
+                    mu_events.append((mutex_id, tempo))
             except ValueError:
                 print(f"Aviso: formato de MU inválido: '{part}'")
     
@@ -155,37 +162,28 @@ def load_simulation_config(filepath: str) -> Tuple[str, Optional[int], Optional[
     tasks = []
     scheduler_type = ""
     quantum = None
-    alpha = None  # NOVO: Parâmetro alpha para envelhecimento
+    alpha = None
 
     with open(filepath, 'r') as f:
-        # A primeira linha define o algoritmo, quantum e alpha
-        # Formato: "ALGORITMO;QUANTUM;ALPHA" ou "ALGORITMO;QUANTUM" ou "ALGORITMO;"
         first_line = f.readline().strip().split(';')
         scheduler_type = first_line[0].strip().upper()
         
-        # Parseia quantum (segundo campo)
         if len(first_line) > 1 and first_line[1].strip():
             quantum = int(first_line[1].strip())
         
-        # NOVO: Parseia alpha (terceiro campo) - usado para PRIOPEnv
         if len(first_line) > 2 and first_line[2].strip():
             alpha = int(first_line[2].strip())
 
-        # As linhas seguintes definem cada tarefa
         for line in f:
             try:
-                # Ignora linhas vazias ou comentários que começam com '#'
                 if not line.strip() or line.strip().startswith('#'):
                     continue
                 
-                # Divide a linha pelos delimitadores ';'
                 parts = line.strip().split(';')
                 
-                # Extrai o ID da tarefa (remove o 't' do início)
                 task_id_str = parts[0].strip().lower().replace('t', '')
                 task_id = int(task_id_str)
                 
-                # Converte cor hexadecimal para RGB
                 cor_hex = parts[1].strip()
                 try:
                     rgb_color = hex_to_rgb(cor_hex)
@@ -193,52 +191,48 @@ def load_simulation_config(filepath: str) -> Tuple[str, Optional[int], Optional[
                     print(f"Aviso: {ve}. Usando cinza padrão para tarefa {task_id}.")
                     rgb_color = [128, 128, 128]
 
-                # Extrai os parâmetros temporais e de prioridade
                 ingresso = int(parts[2])
                 duracao = int(parts[3])
                 
                 prioridade = 0
-                events_start_index = 5  # Índice onde começam os eventos
+                events_start_index = 5
                 
-                # Verifica se parts[4] é prioridade ou evento
                 if len(parts) > 4:
                     part4 = parts[4].strip()
-                    if part4 and not any(part4.startswith(prefix) for prefix in ['IO:', 'ML:', 'MU:']):
-                        # É um número de prioridade
+                    if part4 and not any(part4.startswith(prefix) for prefix in ['IO:', 'ML', 'MU']):
                         try:
                             prioridade = int(part4)
                         except ValueError:
-                            # Se não conseguir converter, assume 0
                             prioridade = 0
                     else:
-                        # parts[4] é um evento, não prioridade
                         events_start_index = 4
                 
-                # Concatena todos os campos de eventos a partir do índice correto
                 events_str = ""
                 if len(parts) > events_start_index:
                     events_str = ';'.join(parts[events_start_index:])
                 
-                # Faz o parsing dos eventos (I/O, ML, MU)
-                io_events, ml_events, mu_events = parse_events(events_str)
+                io_events, ml_events_raw, mu_events_raw = parse_events(events_str)
                 
-                # Cria o TCB (Task Control Block) com todos os parâmetros
+                # Converte para formato usado internamente (apenas tempos, ignora mutex_id por enquanto)
+                # TODO: Suportar múltiplos mutexes
+                ml_events = [tempo for (mutex_id, tempo) in ml_events_raw]
+                mu_events = [tempo for (mutex_id, tempo) in mu_events_raw]
+                
                 task = TCB(
                     id=task_id,
                     RGB=rgb_color,
-                    state=1,              # Estado inicial: 1 (Novo)
-                    inicio=ingresso,      # Tempo de chegada da tarefa
-                    duracao=duracao,      # Tempo de CPU necessário
-                    prio_s=prioridade,    # Prioridade estática
-                    prio_d=prioridade,    # NOVO: prio_d inicia igual a prio_s
-                    io_events=io_events,  # Lista de eventos de I/O
-                    ml_events=ml_events,  # Lista de eventos de mutex lock
-                    mu_events=mu_events   # Lista de eventos de mutex unlock
+                    state=1,
+                    inicio=ingresso,
+                    duracao=duracao,
+                    prio_s=prioridade,
+                    prio_d=prioridade,
+                    io_events=io_events,
+                    ml_events=ml_events,
+                    mu_events=mu_events
                 )
                 tasks.append(task)
             except (ValueError, IndexError) as e:
-                # Em caso de erro no formato, exibe aviso mas continua processando outras linhas
-                print(f"Aviso: ignorando linha mal formatada no arquivo de configuração: '{line.strip()}' - Erro: {e}")
+                print(f"Aviso: ignorando linha mal formatada: '{line.strip()}' - Erro: {e}")
                 continue
             
     return scheduler_type, quantum, alpha, tasks
